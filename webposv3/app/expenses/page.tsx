@@ -280,20 +280,20 @@ export default function ExpensesPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
         {/* Header section */}
-        <header className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <header className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold">Expenses</h1>
-              <p className="text-slate-500 mt-1">
+              <h1 className="text-2xl sm:text-3xl font-bold">Expenses</h1>
+              <p className="text-sm text-slate-500 mt-1 hidden sm:block">
                 Log operating costs, shop utilities, and balance store outflows.
               </p>
             </div>
             {expenseFeatureReady && (
               <button
                 onClick={() => setIsAddExpenseOpen(true)}
-                className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-semibold inline-flex items-center gap-2 shadow-sm hover:bg-blue-700 transition"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-blue-600 text-white font-semibold inline-flex items-center justify-center gap-2 text-sm shadow-sm hover:bg-blue-700 transition"
               >
                 <Plus size={16} />
                 Log Expense
@@ -354,7 +354,8 @@ export default function ExpensesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-left">
                 <thead className="bg-slate-50/60 text-slate-500 text-xs uppercase">
                   <tr>
                     <th className="px-6 py-4">Date</th>
@@ -369,72 +370,27 @@ export default function ExpensesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {loading ? (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-6 py-10 text-center text-slate-400"
-                      >
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" />
-                      </td>
-                    </tr>
+                    <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-600" /></td></tr>
                   ) : rows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-6 py-10 text-center text-slate-400"
-                      >
-                        No recorded expenses match your parameters.
-                      </td>
-                    </tr>
+                    <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-400">No recorded expenses match your parameters.</td></tr>
                   ) : (
                     rows.map((expense) => (
-                      <tr
-                        key={expense.id}
-                        className="hover:bg-slate-50/60 transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {new Date(expense.expense_date).toLocaleDateString()}
-                        </td>
+                      <tr key={expense.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">{new Date(expense.expense_date).toLocaleDateString()}</td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
-                            {expense.category}
-                          </span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">{expense.category}</span>
                         </td>
-                        <td
-                          className="px-6 py-4 font-medium max-w-xs truncate"
-                          title={expense.description}
-                        >
-                          {expense.description}
-                        </td>
-                        <td className="px-6 py-4 text-slate-600">
-                          {expense.payment_method}
-                        </td>
+                        <td className="px-6 py-4 font-medium max-w-xs truncate" title={expense.description}>{expense.description}</td>
+                        <td className="px-6 py-4 text-slate-600">{expense.payment_method}</td>
                         <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
-                          {expense.created_by
-                            ? (userNamesById[expense.created_by] ??
-                              `User ${expense.created_by.slice(0, 8)}`)
-                            : "-"}
+                          {expense.created_by ? (userNamesById[expense.created_by] ?? `User ${expense.created_by.slice(0, 8)}`) : "-"}
                         </td>
-                        <td className="px-6 py-4 text-slate-500 font-mono text-xs">
-                          {expense.reference_no || "-"}
-                        </td>
-                        <td className="px-6 py-4 font-bold text-rose-600">
-                          ₱{Number(expense.amount).toFixed(2)}
-                        </td>
+                        <td className="px-6 py-4 text-slate-500 font-mono text-xs">{expense.reference_no || "-"}</td>
+                        <td className="px-6 py-4 font-bold text-rose-600">₱{Number(expense.amount).toFixed(2)}</td>
                         <td className="px-6 py-4 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-2">
-                            <button
-                              onClick={() => openEditExpense(expense)}
-                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteExpense(expense.id)}
-                              className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => openEditExpense(expense)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
+                            <button onClick={() => handleDeleteExpense(expense.id)} className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -442,6 +398,37 @@ export default function ExpensesPage() {
                   )}
                 </tbody>
               </table>
+
+              {/* Mobile card list */}
+              <div className="sm:hidden divide-y divide-slate-100 text-sm">
+                {loading ? (
+                  <div className="py-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                ) : rows.length === 0 ? (
+                  <p className="py-10 text-center text-slate-400">No recorded expenses.</p>
+                ) : (
+                  rows.map((expense) => (
+                    <div key={expense.id} className="px-4 py-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{expense.description}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {new Date(expense.expense_date).toLocaleDateString()} · {expense.payment_method}
+                          </p>
+                        </div>
+                        <span className="font-bold text-rose-600 whitespace-nowrap">₱{Number(expense.amount).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700">{expense.category}</span>
+                        {expense.reference_no && <span className="text-xs text-slate-400 font-mono">{expense.reference_no}</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => openEditExpense(expense)} className="flex-1 rounded-xl border border-slate-200 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Edit</button>
+                        <button onClick={() => handleDeleteExpense(expense.id)} className="flex-1 rounded-xl border border-rose-100 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">Delete</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             <PaginationControls
@@ -457,8 +444,8 @@ export default function ExpensesPage() {
 
         {/* Action Modal Form (Handles Insertion & Correction Updates) */}
         {isAddExpenseOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 w-full sm:max-w-md shadow-2xl overflow-y-auto max-h-[95vh]">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">
                   {editingExpenseId

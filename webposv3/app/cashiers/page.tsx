@@ -292,29 +292,25 @@ export default function CashiersPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
           <div>
-            <h1 className="text-3xl font-bold">User Management</h1>
-            <p className="text-slate-500 mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold">User Management</h1>
+            <p className="text-sm text-slate-500 mt-1 hidden sm:block">
               Manage user roles and branch assignments.
             </p>
           </div>
           <button
             onClick={loadData}
             disabled={loading}
-            className="px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center gap-2 hover:bg-slate-50 disabled:opacity-60"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 disabled:opacity-60 text-sm"
           >
-            {loading ? (
-              <Loader2 className="animate-spin" size={18} />
-            ) : (
-              <RefreshCw size={18} />
-            )}
+            {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
             Refresh
           </button>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <section className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
           <StatTile
             label="Total Staff"
             value={stats.totalStaff.toString()}
@@ -331,7 +327,7 @@ export default function CashiersPage() {
             icon={<UserCircle2 size={18} />}
           />
         </section>
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <section className="grid grid-cols-2 gap-3 mb-5">
           <StatTile
             label="Approved Cashiers"
             value={stats.approvedCashiers.toString()}
@@ -376,7 +372,8 @@ export default function CashiersPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            {/* Desktop table */}
+            <table className="hidden sm:table w-full text-left">
               <thead className="bg-slate-50/60 text-slate-500 text-xs uppercase">
                 <tr>
                   <th className="px-6 py-4">Name</th>
@@ -389,80 +386,38 @@ export default function CashiersPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {!loading && rows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-6 py-10 text-center text-slate-400"
-                    >
-                      No cashiers found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400">No cashiers found.</td></tr>
                 )}
                 {rows.map((profile) => (
-                  <tr
-                    key={profile.id}
-                    className="hover:bg-slate-50/60 transition-colors"
-                  >
-                    <td className="px-6 py-4 font-semibold">
-                      {profile.full_name || "No name"}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 font-mono">
-                      {profile.id.slice(0, 8)}...
-                    </td>
+                  <tr key={profile.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-6 py-4 font-semibold">{profile.full_name || "No name"}</td>
+                    <td className="px-6 py-4 text-xs text-slate-500 font-mono">{profile.id.slice(0, 8)}...</td>
                     <td className="px-6 py-4">
-                      <select
-                        value={profile.role}
-                        disabled={saving === profile.id}
-                        onChange={(e) =>
-                          updateProfile(profile.id, {
-                            role: e.target.value as Role,
-                          })
-                        }
-                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-600"
-                      >
+                      <select value={profile.role} disabled={saving === profile.id}
+                        onChange={(e) => updateProfile(profile.id, { role: e.target.value as Role })}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-600">
                         <option value="cashier">cashier</option>
                         <option value="admin">admin</option>
                       </select>
                     </td>
                     <td className="px-6 py-4">
                       {profile.role === "cashier" ? (
-                        <button
-                          disabled={saving === profile.id}
-                          onClick={() =>
-                            updateProfile(profile.id, {
-                              is_approved: !profile.is_approved,
-                            })
-                          }
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg ${
-                            profile.is_approved
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
+                        <button disabled={saving === profile.id}
+                          onClick={() => updateProfile(profile.id, { is_approved: !profile.is_approved })}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg ${profile.is_approved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                           {profile.is_approved ? "Approved" : "Approve"}
                         </button>
                       ) : (
-                        <span className="text-xs font-semibold text-slate-400">
-                          N/A
-                        </span>
+                        <span className="text-xs font-semibold text-slate-400">N/A</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <select
-                        value={profile.branch_id || ""}
-                        disabled={saving === profile.id}
-                        onChange={(e) =>
-                          updateProfile(profile.id, {
-                            branch_id: e.target.value || null,
-                          })
-                        }
-                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-600"
-                      >
+                      <select value={profile.branch_id || ""} disabled={saving === profile.id}
+                        onChange={(e) => updateProfile(profile.id, { branch_id: e.target.value || null })}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-600">
                         <option value="">Unassigned</option>
                         {branches.map((branch) => (
-                          <option key={branch.id} value={branch.id}>
-                            {branch.name}
-                          </option>
+                          <option key={branch.id} value={branch.id}>{branch.name}</option>
                         ))}
                       </select>
                     </td>
@@ -473,6 +428,45 @@ export default function CashiersPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {!loading && rows.length === 0 && (
+                <p className="py-10 text-center text-sm text-slate-400">No cashiers found.</p>
+              )}
+              {rows.map((profile) => (
+                <div key={profile.id} className="px-4 py-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-sm">{profile.full_name || "No name"}</p>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">{profile.id.slice(0, 8)}</p>
+                    </div>
+                    <span className="text-xs text-slate-400">{new Date(profile.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <select value={profile.role} disabled={saving === profile.id}
+                      onChange={(e) => updateProfile(profile.id, { role: e.target.value as Role })}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-600">
+                      <option value="cashier">cashier</option>
+                      <option value="admin">admin</option>
+                    </select>
+                    <select value={profile.branch_id || ""} disabled={saving === profile.id}
+                      onChange={(e) => updateProfile(profile.id, { branch_id: e.target.value || null })}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-600">
+                      <option value="">Unassigned</option>
+                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                    {profile.role === "cashier" && (
+                      <button disabled={saving === profile.id}
+                        onClick={() => updateProfile(profile.id, { is_approved: !profile.is_approved })}
+                        className={`px-3 py-2 text-xs font-bold rounded-xl ${profile.is_approved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {profile.is_approved ? "Approved" : "Approve"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <PaginationControls
             currentPage={effectivePage}
@@ -494,7 +488,8 @@ export default function CashiersPage() {
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            {/* Desktop table */}
+            <table className="hidden sm:table w-full text-left">
               <thead className="bg-slate-50/60 text-slate-500 text-xs uppercase">
                 <tr>
                   <th className="px-6 py-4">User</th>
@@ -509,33 +504,38 @@ export default function CashiersPage() {
                     <tr key={activity.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="px-6 py-4 font-semibold">{activity.fullName}</td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                            activity.activity_type === "login"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${activity.activity_type === "login" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}`}>
                           {activity.activity_type}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {activity.branchName}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-500">
-                        {new Date(activity.created_at).toLocaleString()}
-                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{activity.branchName}</td>
+                      <td className="px-6 py-4 text-sm text-slate-500">{new Date(activity.created_at).toLocaleString()}</td>
                     </tr>
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-10 text-center text-slate-400">
-                      No recent user activity found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={4} className="px-6 py-10 text-center text-slate-400">No recent user activity found.</td></tr>
                 )}
               </tbody>
             </table>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {activityRows.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-400">No recent user activity found.</p>
+              ) : (
+                activityRows.map((activity) => (
+                  <div key={activity.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{activity.fullName}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{activity.branchName} · {new Date(activity.created_at).toLocaleString()}</p>
+                    </div>
+                    <span className={`shrink-0 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${activity.activity_type === "login" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}`}>
+                      {activity.activity_type}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
           <PaginationControls
             currentPage={effectiveActivityPage}

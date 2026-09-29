@@ -235,24 +235,24 @@ export default function ProductsPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Products</h1>
-            <p className="mt-1 text-slate-500">
+            <h1 className="text-2xl sm:text-3xl font-bold">Products</h1>
+            <p className="mt-1 text-sm text-slate-500 hidden sm:block">
               Manage your products, services, pricing, and barcode data.
             </p>
           </div>
           <button
             onClick={openAddModal}
-            className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-semibold text-white"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 font-semibold text-white text-sm w-full sm:w-auto"
           >
             <Plus size={16} />
             Add Item
           </button>
         </header>
 
-        <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile
             label="Products On Page"
             value={rows.length.toString()}
@@ -293,7 +293,8 @@ export default function ProductsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            {/* Desktop table */}
+            <table className="hidden sm:table w-full text-left">
               <thead className="bg-slate-50/60 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-6 py-4">Product</th>
@@ -309,19 +310,13 @@ export default function ProductsPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="px-6 py-10 text-center text-slate-400"
-                    >
+                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-600" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="px-6 py-10 text-center text-slate-400"
-                    >
+                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400">
                       No products found.
                     </td>
                   </tr>
@@ -337,19 +332,11 @@ export default function ProductsPage() {
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {product.barcode || "-"}
                       </td>
-                      <td className="px-6 py-4">
-                        ₱{Number(product.price).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 text-slate-600">
-                        ₱{Number(product.cost).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4">
-                        {product.low_stock_threshold ?? 0}
-                      </td>
+                      <td className="px-6 py-4">₱{Number(product.price).toFixed(2)}</td>
+                      <td className="px-6 py-4 text-slate-600">₱{Number(product.cost).toFixed(2)}</td>
+                      <td className="px-6 py-4">{product.low_stock_threshold ?? 0}</td>
                       <td className="px-6 py-4 text-sm text-slate-500">
-                        {product.updated_at
-                          ? new Date(product.updated_at).toLocaleString()
-                          : "-"}
+                        {product.updated_at ? new Date(product.updated_at).toLocaleString() : "-"}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
@@ -365,6 +352,40 @@ export default function ProductsPage() {
                 )}
               </tbody>
             </table>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {loading ? (
+                <div className="py-10 flex justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              ) : rows.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-400">No products found.</p>
+              ) : (
+                rows.map((product) => (
+                  <div key={product.id} className="px-4 py-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{product.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 font-mono">{product.barcode || "No barcode"}</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                          {product.product_type}
+                        </span>
+                        <span className="text-xs text-slate-600">₱{Number(product.price).toFixed(2)}</span>
+                        <span className="text-xs text-slate-400">cost ₱{Number(product.cost).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openEditModal(product)}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           <PaginationControls
@@ -378,8 +399,8 @@ export default function ProductsPage() {
         </section>
 
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm">
+            <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-6 sm:p-8 shadow-2xl max-h-[95vh] overflow-y-auto">
               <div className="mb-6 flex items-center justify-between">
                 <h2 className="text-xl font-bold">
                   {editingProductId ? "Edit Product" : "Add Product"}

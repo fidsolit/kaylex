@@ -975,50 +975,50 @@ export default function Inventory() {
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="mb-10 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
           <div>
             <button
               onClick={() => router.push("/pos")}
-              className="mb-2 flex items-center gap-2 font-medium text-blue-600 hover:underline"
+              className="mb-2 flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
             >
-              <ArrowLeft size={18} /> Back to Dashboard
+              <ArrowLeft size={16} /> Back to Dashboard
             </button>
             <div className="mb-1 flex items-center gap-2">
               <span className="flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
                 <Store size={10} /> {activeBranchName}
               </span>
             </div>
-            <h1 className="text-3xl font-bold">Inventory List</h1>
-            <p className="text-slate-500">
+            <h1 className="text-2xl sm:text-3xl font-bold">Inventory List</h1>
+            <p className="text-sm text-slate-500 hidden sm:block">
               Managing stock for {activeBranchName}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 font-bold text-white shadow-xl shadow-blue-100 transition-all hover:scale-105"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
             >
-              <Plus size={20} /> Add Product
+              <Plus size={16} /> Add Product
             </button>
             <button
               onClick={() => setIsDeliveryModalOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 font-bold text-white shadow-xl shadow-emerald-100 transition-all hover:scale-105"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
             >
-              <Plus size={20} /> Receive Delivery
+              <Plus size={16} /> Delivery
             </button>
             <button
               onClick={() => setIsVariantModalOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-violet-600 px-6 py-3 font-bold text-white shadow-xl shadow-violet-100 transition-all hover:scale-105"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
             >
-              <Plus size={20} /> Add Variant
+              <Plus size={16} /> Variant
             </button>
             <button
               onClick={() => setIsLossModalOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-rose-600 px-6 py-3 font-bold text-white shadow-xl shadow-rose-100 transition-all hover:scale-105"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
             >
-              <Plus size={20} /> Log Loss
+              <Plus size={16} /> Log Loss
             </button>
           </div>
         </header>

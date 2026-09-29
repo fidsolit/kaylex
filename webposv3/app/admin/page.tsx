@@ -142,22 +142,22 @@ export default function AdminDashboardPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="mb-8">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="mb-6 sm:mb-8">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-blue-600 p-3 text-white">
-              <Shield size={20} />
+            <div className="rounded-2xl bg-blue-600 p-2.5 sm:p-3 text-white shrink-0">
+              <Shield size={18} />
             </div>
             <div>
-              <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-              <p className="mt-1 text-slate-500">
+              <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
+              <p className="mt-0.5 text-sm text-slate-500 hidden sm:block">
                 Manage products, inventory, users, and daily store performance.
               </p>
             </div>
           </div>
         </header>
 
-        <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="mb-6 sm:mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
           <StatTile label="Products" value={counts.products.toString()} icon={<Package size={18} />} />
           <StatTile label="Inventory Rows" value={counts.inventoryRows.toString()} icon={<Boxes size={18} />} />
           <StatTile label="Low Stock Alerts" value={counts.lowStock.toString()} icon={<Receipt size={18} />} alert={counts.lowStock > 0} />
@@ -174,7 +174,7 @@ export default function AdminDashboardPage() {
           </section>
         )}
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <QuickLinkCard
             href="/products"
             title="Products"

@@ -15,8 +15,8 @@ export function ModalShell({
   widthClassName = "max-w-md",
 }: ModalShellProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className={`w-full rounded-3xl bg-white p-8 shadow-2xl ${widthClassName}`}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm">
+      <div className={`w-full rounded-t-3xl sm:rounded-3xl bg-white p-6 sm:p-8 shadow-2xl max-h-[95vh] overflow-y-auto sm:${widthClassName}`}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-bold">{title}</h2>
           <button

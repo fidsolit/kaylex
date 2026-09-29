@@ -469,19 +469,19 @@ export default function CustomersPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold">Customers</h1>
-              <p className="text-slate-500 mt-1">
+              <h1 className="text-2xl sm:text-3xl font-bold">Customers</h1>
+              <p className="text-sm text-slate-500 mt-1 hidden sm:block">
                 Track unpaid customer credit and send reminders.
               </p>
             </div>
             {customerFeatureReady && (
               <button
                 onClick={() => setIsAddCustomerOpen(true)}
-                className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-semibold inline-flex items-center gap-2"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-blue-600 text-white font-semibold inline-flex items-center justify-center gap-2 text-sm"
               >
                 <Plus size={16} />
                 Add Customer
@@ -591,7 +591,8 @@ export default function CustomersPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            {/* Desktop table */}
+            <table className="hidden sm:table w-full text-left">
               <thead className="bg-slate-50/60 text-slate-500 text-xs uppercase">
                 <tr>
                   <th className="px-6 py-4">Customer</th>
@@ -605,61 +606,37 @@ export default function CustomersPage() {
               <tbody className="divide-y divide-slate-100">
                 {!loading && customers.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-6 py-10 text-center text-slate-400"
-                    >
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-400">
                       No customers with unpaid credit.
                     </td>
                   </tr>
                 )}
                 {paginatedCustomers.map((customer) => (
                   <tr key={customer.key} className="hover:bg-slate-50/60">
-                    <td className="px-6 py-4 font-semibold">
-                      {customer.customer_name}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {customer.contact_number || "-"}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-amber-600">
-                      ₱{customer.to_pay_amount.toFixed(2)}
-                    </td>
+                    <td className="px-6 py-4 font-semibold">{customer.customer_name}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{customer.contact_number || "-"}</td>
+                    <td className="px-6 py-4 font-bold text-amber-600">₱{customer.to_pay_amount.toFixed(2)}</td>
                     <td className="px-6 py-4">{customer.unpaid_count}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {customer.next_due_date
-                        ? new Date(customer.next_due_date).toLocaleDateString()
-                        : "-"}
+                      {customer.next_due_date ? new Date(customer.next_due_date).toLocaleDateString() : "-"}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex items-center gap-2">
                         <button
-                          disabled={
-                            paidLoadingKey === customer.key ||
-                            smsLoadingKey === customer.key
-                          }
+                          disabled={paidLoadingKey === customer.key || smsLoadingKey === customer.key}
                           onClick={() => markCustomerAsPaid(customer)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50"
                         >
-                          {paidLoadingKey === customer.key ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : null}
+                          {paidLoadingKey === customer.key ? <Loader2 size={12} className="animate-spin" /> : null}
                           Mark Paid
                         </button>
                         <button
-                          disabled={
-                            smsLoadingKey === customer.key ||
-                            !customer.contact_number ||
-                            paidLoadingKey === customer.key
-                          }
+                          disabled={smsLoadingKey === customer.key || !customer.contact_number || paidLoadingKey === customer.key}
                           onClick={() => sendSmsReminder(customer)}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
                         >
-                          {smsLoadingKey === customer.key ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <MessageSquare size={14} />
-                          )}
-                          Send SMS
+                          {smsLoadingKey === customer.key ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />}
+                          SMS
                         </button>
                       </div>
                     </td>
@@ -667,6 +644,48 @@ export default function CustomersPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {!loading && customers.length === 0 && (
+                <p className="py-10 text-center text-sm text-slate-400">No customers with unpaid credit.</p>
+              )}
+              {paginatedCustomers.map((customer) => (
+                <div key={customer.key} className="px-4 py-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-sm">{customer.customer_name}</p>
+                      <p className="text-xs text-slate-500">{customer.contact_number || "No contact"}</p>
+                    </div>
+                    <span className="font-bold text-amber-600 text-sm whitespace-nowrap">₱{customer.to_pay_amount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>{customer.unpaid_count} unpaid</span>
+                    {customer.next_due_date && (
+                      <span>· due {new Date(customer.next_due_date).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={paidLoadingKey === customer.key || smsLoadingKey === customer.key}
+                      onClick={() => markCustomerAsPaid(customer)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50"
+                    >
+                      {paidLoadingKey === customer.key ? <Loader2 size={12} className="animate-spin" /> : null}
+                      Mark Paid
+                    </button>
+                    <button
+                      disabled={smsLoadingKey === customer.key || !customer.contact_number || paidLoadingKey === customer.key}
+                      onClick={() => sendSmsReminder(customer)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
+                    >
+                      {smsLoadingKey === customer.key ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />}
+                      Send SMS
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <PaginationControls
             currentPage={effectiveCustomerSummaryPage}
@@ -681,8 +700,8 @@ export default function CustomersPage() {
         </div>
 
         {isAddCustomerOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 w-full sm:max-w-md shadow-2xl max-h-[95vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">New Customer</h2>
                 <button

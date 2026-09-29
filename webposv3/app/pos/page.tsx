@@ -170,6 +170,7 @@ interface LowStockItem {
 }
 
 type PaymentMethod = "cash" | "credit";
+// type PaymentMethod= "cash";
 
 export default function POSDashboard() {
   const router = useRouter();
@@ -225,6 +226,16 @@ export default function POSDashboard() {
   const [saleCreditNote, setSaleCreditNote] = useState("");
   const [salePromiseToPayDate, setSalePromiseToPayDate] = useState("");
   const recentTransactionsPageSize = 5;
+
+  // --- Keyboard shortcut refs ---
+  const itemSearchRef = useRef<HTMLInputElement | null>(null);
+  const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const cashInputRef = useRef<HTMLInputElement | null>(null);
+  const transactionsTableRef = useRef<HTMLDivElement | null>(null);
+  const lastCartItemQtyRef = useRef<HTMLInputElement | null>(null);
+
+  // F7: complete sale without opening print dialog
+  const [noPrint, setNoPrint] = useState(false);
 
   const resetSaleForm = useCallback(() => {
     setCart([]);
@@ -575,11 +586,11 @@ export default function POSDashboard() {
     setCatalogItems(uniqueItems);
   }, [activeBranchId]);
 
-  const openNewSaleModal = async () => {
+  const openNewSaleModal = useCallback(async () => {
     resetSaleForm();
     setIsModalOpen(true);
     await loadCatalogItems();
-  };
+  }, [resetSaleForm, loadCatalogItems]);
 
   const ensureCustomerRecord = useCallback(
     async (
@@ -663,16 +674,28 @@ export default function POSDashboard() {
     });
   };
 
-  const handleBarcodeAdd = () => {
-    const code = barcodeInput.trim();
-    if (!code) return;
-    const matched = catalogItems.find((item) => item.barcode === code);
+  const handleBarcodeAdd = (code?: string) => {
+    const resolvedCode = (code ?? barcodeInput).trim();
+    if (!resolvedCode) return;
+    const matched = catalogItems.find((item) => item.barcode === resolvedCode);
     if (!matched) {
       alert("Barcode not found in available items.");
       return;
     }
     addItemToCart(matched);
     setBarcodeInput("");
+  };
+
+  // Auto-add when barcode scanner finishes typing (scanners send chars very
+  // fast then stop — 120 ms idle is enough to distinguish scanner from manual)
+  const barcodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleBarcodeChange = (value: string) => {
+    setBarcodeInput(value);
+    if (barcodeDebounceRef.current) clearTimeout(barcodeDebounceRef.current);
+    if (!value.trim()) return;
+    barcodeDebounceRef.current = setTimeout(() => {
+      handleBarcodeAdd(value.trim());
+    }, 120);
   };
 
   const handleQuantityChange = (productId: string, quantity: number) => {
@@ -690,7 +713,7 @@ export default function POSDashboard() {
     0,
   );
 
-  const handleAddNewSale = async () => {
+  const handleAddNewSale = useCallback(async () => {
     if (!activeBranchId || !currentUserId) {
       return alert("Missing branch or user context.");
     }
@@ -913,8 +936,30 @@ export default function POSDashboard() {
     setIsModalOpen(false);
     resetSaleForm();
     await refreshDashboardData();
+    // F7: skip print, just close silently
+    if (!noPrint) {
+      // future: auto-open print dialog here if needed
+    }
+    setNoPrint(false);
     setSubmittingSale(false);
-  };
+  }, [
+    activeBranchId,
+    currentUserId,
+    cart,
+    paymentMethod,
+    cashAmount,
+    cartSubtotal,
+    saleCustomerName,
+    saleCustomerContact,
+    saleCreditNote,
+    salePromiseToPayDate,
+    noPrint,
+    resetSaleForm,
+    refreshDashboardData,
+    ensureCustomerRecord,
+  ]);
+
+
   const filteredCatalogItems = catalogItems.filter((item) => {
     const q = itemSearch.trim().toLowerCase();
     if (!q) return true;
@@ -972,7 +1017,7 @@ export default function POSDashboard() {
     await refreshDashboardData();
   };
 
-  const handleVoidSale = async (saleId: string) => {
+  const handleVoidSale = useCallback(async (saleId: string) => {
     if (!activeBranchId || !currentUserId) {
       alert("Missing branch or user context.");
       return;
@@ -1116,7 +1161,7 @@ export default function POSDashboard() {
       return;
     }
     await refreshDashboardData();
-  };
+  }, [activeBranchId, currentUserId, refreshDashboardData]);
 
   const viewSaleDetails = async (sale: Sale) => {
     setDetailsLoading(true);
@@ -1291,10 +1336,174 @@ export default function POSDashboard() {
     setDetailsLoading(false);
   };
 
-  const closeSaleDetails = () => {
+  const closeSaleDetails = useCallback(() => {
     setSelectedSaleDetail(null);
     setDetailsLoading(false);
-  };
+  }, []);
+
+  // ─── Global keyboard shortcuts (F1–F11 + Escape) ────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Never steal keystrokes from regular text inputs/textareas
+      const tag = (e.target as HTMLElement).tagName;
+      const isTyping =
+        (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") &&
+        !["F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","Escape"].includes(e.key);
+      if (isTyping) return;
+
+      switch (e.key) {
+        // F1 — Input Transaction (open New Sale)
+        case "F1": {
+          e.preventDefault();
+          if (!isModalOpen) {
+            void openNewSaleModal();
+          }
+          break;
+        }
+
+        // F2 — Product Details Pane (focus item search inside sale modal)
+        case "F2": {
+          e.preventDefault();
+          if (isModalOpen) {
+            itemSearchRef.current?.focus();
+          } else {
+            void openNewSaleModal().then(() => {
+              setTimeout(() => itemSearchRef.current?.focus(), 50);
+            });
+          }
+          break;
+        }
+
+        // F3 — Change Quantity (focus barcode/scan field)
+        case "F3": {
+          e.preventDefault();
+          if (isModalOpen) {
+            barcodeInputRef.current?.focus();
+          }
+          break;
+        }
+
+        // F4 — Apply Discount / switch to Credit payment
+        case "F4": {
+          e.preventDefault();
+          if (isModalOpen && cart.length > 0) {
+            setPaymentMethod("credit");
+          }
+          break;
+        }
+
+        // F5 — Look-up Transactions (close modal, scroll to table)
+        case "F5": {
+          e.preventDefault();
+          if (isModalOpen) {
+            setIsModalOpen(false);
+            resetSaleForm();
+          }
+          setTimeout(() => {
+            transactionsTableRef.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }, 100);
+          break;
+        }
+
+        // F6 — Order Reserved (switch payment to Cash / toggle back)
+        case "F6": {
+          e.preventDefault();
+          if (isModalOpen) {
+            setPaymentMethod("cash");
+          }
+          break;
+        }
+
+        // F7 — AutoPay w/o Printing Receipt
+        case "F7": {
+          e.preventDefault();
+          if (isModalOpen && cart.length > 0 && !submittingSale) {
+            setNoPrint(true);
+            void handleAddNewSale();
+          }
+          break;
+        }
+
+        // F8 — Process Order / Payments (focus cash input or submit)
+        case "F8": {
+          e.preventDefault();
+          if (isModalOpen && cart.length > 0) {
+            if (paymentMethod === "cash") {
+              cashInputRef.current?.focus();
+            } else {
+              if (!submittingSale) void handleAddNewSale();
+            }
+          }
+          break;
+        }
+
+        // F9 — View Pending Orders (scroll to transactions)
+        case "F9": {
+          e.preventDefault();
+          transactionsTableRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+          break;
+        }
+
+        // F10 — Void last transaction (admin only)
+        case "F10": {
+          e.preventDefault();
+          if (userRole === "admin" && sales.length > 0) {
+            const lastNonVoided = sales.find((s) => s.status !== "void");
+            if (lastNonVoided) void handleVoidSale(lastNonVoided.id);
+          }
+          break;
+        }
+
+        // F11 — Log Off User
+        case "F11": {
+          e.preventDefault();
+          const confirmed = window.confirm("Log off and return to login?");
+          if (confirmed) {
+            void supabase.auth.signOut().then(() => {
+              router.push("/auth/login");
+            });
+          }
+          break;
+        }
+
+        // Escape — close any open modal
+        case "Escape": {
+          if (isModalOpen) {
+            setIsModalOpen(false);
+            resetSaleForm();
+          }
+          if (isCreditModalOpen) setIsCreditModalOpen(false);
+          if (selectedSaleDetail) closeSaleDetails();
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    isModalOpen,
+    isCreditModalOpen,
+    selectedSaleDetail,
+    cart,
+    submittingSale,
+    paymentMethod,
+    userRole,
+    sales,
+    openNewSaleModal,
+    resetSaleForm,
+    handleAddNewSale,
+    handleVoidSale,
+    closeSaleDetails,
+    router,
+  ]);
+  // ────────────────────────────────────────────────────────────────────────────
 
   const printSaleDetails = (sale: SaleDetail) => {
     const cashierName =
@@ -1461,30 +1670,32 @@ printWindow.print();
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar onNewSaleClick={openNewSaleModal} />
 
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 pb-20 md:pt-10 md:p-10 md:pb-20">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
-            <h2 className="text-3xl font-bold">Dashboard Overview</h2>
-            <p className="text-slate-500 mt-1">Real-time performance metrics</p>
+            <h2 className="text-2xl sm:text-3xl font-bold">Dashboard Overview</h2>
+            <p className="text-slate-500 mt-1 text-sm">Real-time performance metrics</p>
           </div>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={openNewSaleModal}
-            className="w-full md:w-auto px-6 py-3 rounded-2xl font-bold bg-blue-600 text-white shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2"
+            className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-blue-600 text-white shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm"
           >
-            <Plus size={20} /> New Sale
+            <Plus size={18} /> New Sale
           </button>
           {creditFeatureReady && (
             <button
               onClick={() => setIsCreditModalOpen(true)}
-              className="w-full md:w-auto px-6 py-3 rounded-2xl font-bold bg-amber-500 text-white shadow-xl hover:scale-105 transition-all"
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-amber-500 text-white shadow-xl hover:scale-105 transition-all text-sm"
             >
-              Add Customer Credit
+              Add Credit
             </button>
           )}
+          </div>
         </header>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
           <StatCard
             label="Total Revenue"
             value={`₱${revenue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}
@@ -1509,10 +1720,10 @@ printWindow.print();
         </div>
 
         {/* Recent Transactions Table */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-8 border-b border-slate-50">
-            <h3 className="text-lg font-bold">Recent Transactions</h3>
-            <p className="text-sm text-slate-500 mt-1">
+        <div ref={transactionsTableRef} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-5 sm:p-8 border-b border-slate-50">
+            <h3 className="text-base sm:text-lg font-bold">Recent Transactions</h3>
+            <p className="text-sm text-slate-500 mt-1 hidden sm:block">
               Latest sales recorded in your POS, including unit cost per
               transaction.
             </p>
@@ -1804,8 +2015,8 @@ printWindow.print();
 
       {/* --- NEW SALE MODAL --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-5xl shadow-2xl animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 w-full sm:max-w-5xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 sm:zoom-in duration-200 max-h-[95vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">New Sale</h2>
               <button
@@ -1819,7 +2030,7 @@ printWindow.print();
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
               <div className="space-y-3">
                 <div className="relative">
                   <Search
@@ -1828,6 +2039,7 @@ printWindow.print();
                   />
                   <input
                     autoFocus
+                    ref={itemSearchRef}
                     value={itemSearch}
                     onChange={(e) => setItemSearch(e.target.value)}
                     placeholder="Search item name or barcode"
@@ -1835,13 +2047,18 @@ printWindow.print();
                   />
                 </div>
                 <input
+                  ref={barcodeInputRef}
                   value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="Scan barcode then press Enter"
+                  onChange={(e) => handleBarcodeChange(e.target.value)}
+                  placeholder="Scan barcode (auto-adds)"
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (barcodeDebounceRef.current) {
+                        clearTimeout(barcodeDebounceRef.current);
+                        barcodeDebounceRef.current = null;
+                      }
                       handleBarcodeAdd();
                     }
                   }}
@@ -1937,11 +2154,12 @@ printWindow.print();
                   </div>
                   <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
                     <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-600">
+                      {/* <label className="block text-sm font-semibold text-slate-600">
                         Payment Method
-                      </label>
-                      <select
+                      </label> */}
+                      {/* <select
                         value={paymentMethod}
+                        disabled={true}
                         onChange={(e) =>
                           setPaymentMethod(e.target.value as PaymentMethod)
                         }
@@ -1949,7 +2167,7 @@ printWindow.print();
                       >
                         <option value="cash">Cash</option>
                         <option value="credit">Credit</option>
-                      </select>
+                      </select> */}
                     </div>
 
                     {paymentMethod === "cash" ? (
@@ -1957,6 +2175,7 @@ printWindow.print();
                         <div className="flex justify-between font-bold text-lg">
                           <span>Cash</span>
                           <input
+                            ref={cashInputRef}
                             type="number"
                             step="any"
                             placeholder="0.00"
@@ -2053,8 +2272,8 @@ printWindow.print();
       )}
 
       {isCreditModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 w-full sm:max-w-md shadow-2xl animate-in fade-in slide-in-from-bottom-4 sm:zoom-in duration-200 max-h-[95vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">Add Customer Credit</h2>
               <button
@@ -2116,8 +2335,8 @@ printWindow.print();
       )}
 
       {(detailsLoading || selectedSaleDetail) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm">
+          <div className="w-full sm:max-w-4xl rounded-t-3xl sm:rounded-3xl bg-white p-4 sm:p-6 shadow-2xl max-h-[95vh] overflow-y-auto">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">Transaction Details</h2>
@@ -2418,6 +2637,33 @@ printWindow.print();
           </div>
         </div>
       )}
+      {/* ── Shortcut Bar ──────────────────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 hidden sm:flex items-stretch border-t border-slate-200 bg-white text-[10px] font-semibold shadow-lg select-none print:hidden overflow-x-auto">
+        {[
+          { key: "Enter", label: "Execute" },
+          { key: "F1",  label: "New Sale" },
+          { key: "F2",  label: "Search Items" },
+          { key: "F3",  label: "Scan Barcode" },
+          { key: "F4",  label: "Credit Pay" },
+          { key: "F5",  label: "Transactions" },
+          { key: "F6",  label: "Cash Pay" },
+          { key: "F7",  label: "Pay (No Print)" },
+          { key: "F8",  label: "Process Sale" },
+          { key: "F9",  label: "View Orders" },
+          { key: "F10", label: "Void Trans" },
+          { key: "F11", label: "Log Off" },
+        ].map(({ key, label }) => (
+          <div
+            key={key}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 border-r border-slate-200 px-1 py-2 last:border-r-0"
+          >
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 leading-tight">
+              {key}
+            </span>
+            <span className="text-slate-700 leading-tight text-center">{label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

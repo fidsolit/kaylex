@@ -337,36 +337,32 @@ export default function ReportsPage() {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <header className="mb-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:pt-10 md:p-10">
+        <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Profit Reports</h1>
-            <p className="text-slate-500 mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Profit Reports</h1>
+            <p className="text-sm text-slate-500 mt-1 hidden sm:block">
               Revenue, cost, expenses, and operating profit in one year-to-date view.
             </p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-1 inline-flex">
+          <div className="bg-white border border-slate-200 rounded-2xl p-1 inline-flex self-start sm:self-auto">
             <button
               onClick={() => setViewMode("cards")}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 ${
-                viewMode === "cards"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 ${
+                viewMode === "cards" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              <LayoutGrid size={16} />
-              Card View
+              <LayoutGrid size={14} />
+              Cards
             </button>
             <button
               onClick={() => setViewMode("graph")}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 ${
-                viewMode === "graph"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 ${
+                viewMode === "graph" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              <BarChart3 size={16} />
-              Graph View
+              <BarChart3 size={14} />
+              Graph
             </button>
           </div>
         </header>
@@ -377,7 +373,7 @@ export default function ReportsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <section className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Total Revenue
@@ -431,7 +427,7 @@ export default function ReportsPage() {
                   Summary cards above reflect the <strong>Yearly</strong> period to avoid
                   double-counting overlapping daily, weekly, and monthly data.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wide">
                       <Wallet className="h-4 w-4" />
@@ -553,7 +549,8 @@ export default function ReportsPage() {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                {/* Desktop table */}
+                <table className="hidden sm:table w-full text-left">
                   <thead>
                     <tr className="text-slate-400 text-xs uppercase bg-slate-50/70">
                       <th className="px-6 py-3 font-semibold">Receipt</th>
@@ -567,44 +564,48 @@ export default function ReportsPage() {
                     {recentTransactions.length > 0 ? (
                       recentTransactions.map((tx) => (
                         <tr key={tx.id} className="hover:bg-slate-50/60">
-                          <td className="px-6 py-4 text-sm font-semibold text-slate-800">
-                            {tx.receiptNo}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-slate-500">
-                            {new Date(tx.createdAt).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-amber-600">
-                            {currency.format(tx.unitCostTotal)}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-slate-800">
-                            {currency.format(tx.total)}
-                          </td>
-                          <td
-                            className={`px-6 py-4 text-sm font-bold ${
-                              tx.profit >= 0 ? "text-emerald-600" : "text-rose-600"
-                            }`}
-                          >
+                          <td className="px-6 py-4 text-sm font-semibold text-slate-800">{tx.receiptNo}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500">{new Date(tx.createdAt).toLocaleString()}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-amber-600">{currency.format(tx.unitCostTotal)}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-slate-800">{currency.format(tx.total)}</td>
+                          <td className={`px-6 py-4 text-sm font-bold ${tx.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                             {currency.format(tx.profit)}
                           </td>
                         </tr>
                       ))
                     ) : (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-6 py-8 text-sm text-center text-slate-400"
-                        >
-                          No recent completed transactions yet.
-                        </td>
-                      </tr>
+                      <tr><td colSpan={5} className="px-6 py-8 text-sm text-center text-slate-400">No recent completed transactions yet.</td></tr>
                     )}
                   </tbody>
                 </table>
+
+                {/* Mobile card list */}
+                <div className="sm:hidden divide-y divide-slate-100">
+                  {recentTransactions.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-slate-400">No recent completed transactions yet.</p>
+                  ) : (
+                    recentTransactions.map((tx) => (
+                      <div key={tx.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm">{tx.receiptNo}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
+                          <p className="text-xs text-amber-600 mt-0.5">Cost {currency.format(tx.unitCostTotal)}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold">{currency.format(tx.total)}</p>
+                          <p className={`text-xs font-bold mt-0.5 ${tx.profit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                            {currency.format(tx.profit)}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </section>
 
             {viewMode === "cards" ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
                 {metrics.map((metric) => (
                   <section
                     key={metric.label}
