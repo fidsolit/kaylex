@@ -128,8 +128,7 @@ export default function ProductsPage() {
   const effectivePage = Math.min(currentPage, totalPages);
 
   const totalInventoryValue = useMemo(
-    () =>
-      rows.reduce((sum, row) => sum + Number(row.cost || 0), 0),
+    () => rows.reduce((sum, row) => sum + Number(row.cost || 0), 0),
     [rows],
   );
 
@@ -204,7 +203,10 @@ export default function ProductsPage() {
     };
 
     const result = editingProductId
-      ? await supabase.from("products").update(payload).eq("id", editingProductId)
+      ? await supabase
+          .from("products")
+          .update(payload)
+          .eq("id", editingProductId)
       : await supabase.from("products").insert([payload]);
 
     if (result.error) {
@@ -243,13 +245,13 @@ export default function ProductsPage() {
               Manage your products, services, pricing, and barcode data.
             </p>
           </div>
-          <button
+          {/* <button
             onClick={openAddModal}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 font-semibold text-white text-sm w-full sm:w-auto"
           >
             <Plus size={16} />
             Add Item
-          </button>
+          </button> */}
         </header>
 
         <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -310,20 +312,28 @@ export default function ProductsPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400">
+                    <td
+                      colSpan={8}
+                      className="px-6 py-10 text-center text-slate-400"
+                    >
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-600" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400">
+                    <td
+                      colSpan={8}
+                      className="px-6 py-10 text-center text-slate-400"
+                    >
                       No products found.
                     </td>
                   </tr>
                 ) : (
                   rows.map((product) => (
                     <tr key={product.id} className="hover:bg-slate-50/60">
-                      <td className="px-6 py-4 font-semibold">{product.name}</td>
+                      <td className="px-6 py-4 font-semibold">
+                        {product.name}
+                      </td>
                       <td className="px-6 py-4">
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold uppercase text-slate-600">
                           {product.product_type}
@@ -332,11 +342,19 @@ export default function ProductsPage() {
                       <td className="px-6 py-4 font-mono text-xs text-slate-500">
                         {product.barcode || "-"}
                       </td>
-                      <td className="px-6 py-4">₱{Number(product.price).toFixed(2)}</td>
-                      <td className="px-6 py-4 text-slate-600">₱{Number(product.cost).toFixed(2)}</td>
-                      <td className="px-6 py-4">{product.low_stock_threshold ?? 0}</td>
+                      <td className="px-6 py-4">
+                        ₱{Number(product.price).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        ₱{Number(product.cost).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {product.low_stock_threshold ?? 0}
+                      </td>
                       <td className="px-6 py-4 text-sm text-slate-500">
-                        {product.updated_at ? new Date(product.updated_at).toLocaleString() : "-"}
+                        {product.updated_at
+                          ? new Date(product.updated_at).toLocaleString()
+                          : "-"}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
@@ -360,19 +378,32 @@ export default function ProductsPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                 </div>
               ) : rows.length === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-400">No products found.</p>
+                <p className="py-10 text-center text-sm text-slate-400">
+                  No products found.
+                </p>
               ) : (
                 rows.map((product) => (
-                  <div key={product.id} className="px-4 py-4 flex items-start justify-between gap-3">
+                  <div
+                    key={product.id}
+                    className="px-4 py-4 flex items-start justify-between gap-3"
+                  >
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate">{product.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 font-mono">{product.barcode || "No barcode"}</p>
+                      <p className="font-semibold text-sm truncate">
+                        {product.name}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                        {product.barcode || "No barcode"}
+                      </p>
                       <div className="flex flex-wrap gap-2 mt-2">
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
                           {product.product_type}
                         </span>
-                        <span className="text-xs text-slate-600">₱{Number(product.price).toFixed(2)}</span>
-                        <span className="text-xs text-slate-400">cost ₱{Number(product.cost).toFixed(2)}</span>
+                        <span className="text-xs text-slate-600">
+                          ₱{Number(product.price).toFixed(2)}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          cost ₱{Number(product.cost).toFixed(2)}
+                        </span>
                       </div>
                     </div>
                     <button
@@ -505,7 +536,9 @@ export default function ProductsPage() {
                   disabled={saving}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 font-bold text-white disabled:opacity-60"
                 >
-                  {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                  {saving ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : null}
                   {editingProductId ? "Update Product" : "Save Product"}
                 </button>
               </div>

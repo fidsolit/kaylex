@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, {
@@ -678,6 +677,8 @@ export default function Inventory() {
       .eq("branch_id", activeBranchId)
       .eq("product_id", deliveryForm.productId)
       .single();
+    // Note: Using maybeSingle() to handle cases where the inventory record might not exist yet.
+    //debugger;
 
     if (inventoryError || !inventoryRecord) {
       alert(inventoryError?.message || "Inventory item not found.");
@@ -1545,4 +1546,3 @@ export default function Inventory() {
     </div>
   );
 }
-

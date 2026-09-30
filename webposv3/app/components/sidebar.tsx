@@ -17,6 +17,7 @@ import {
   Receipt,
   Settings,
   LogOut,
+  ListChecks,
   Menu,
   X,
 } from "lucide-react";
@@ -40,7 +41,8 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/cashiers") ||
     pathname.startsWith("/reports") ||
-    pathname.startsWith("/settings");
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/shifts");
   const effectiveRole = role ?? (isAdminRoute ? "admin" : null);
 
   useEffect(() => {
@@ -125,11 +127,23 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
             xmlns="http://www.w3.org/2000/svg"
           >
             <defs>
-              <linearGradient id="sb-blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <linearGradient
+                id="sb-blueGrad"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="100%"
+              >
                 <stop offset="0%" stopColor="#3b82f6" />
                 <stop offset="100%" stopColor="#1d4ed8" />
               </linearGradient>
-              <linearGradient id="sb-greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient
+                id="sb-greenGrad"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
                 <stop offset="0%" stopColor="#10b981" />
                 <stop offset="100%" stopColor="#059669" />
               </linearGradient>
@@ -144,11 +158,50 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
                 fill="url(#sb-blueGrad)"
               />
               <path d="M32 15 H128 V65 H32 Z" fill="#1e293b" opacity="0.9" />
-              <rect x="42" y="90" width="18" height="12" rx="3" fill="#ffffff" opacity="0.2" />
-              <rect x="71" y="90" width="18" height="12" rx="3" fill="#ffffff" opacity="0.2" />
-              <rect x="100" y="90" width="18" height="12" rx="3" fill="#ffffff" opacity="0.2" />
-              <rect x="42" y="112" width="47" height="12" rx="3" fill="#ffffff" opacity="0.3" />
-              <rect x="100" y="112" width="18" height="12" rx="3" fill="url(#sb-greenGrad)" />
+              <rect
+                x="42"
+                y="90"
+                width="18"
+                height="12"
+                rx="3"
+                fill="#ffffff"
+                opacity="0.2"
+              />
+              <rect
+                x="71"
+                y="90"
+                width="18"
+                height="12"
+                rx="3"
+                fill="#ffffff"
+                opacity="0.2"
+              />
+              <rect
+                x="100"
+                y="90"
+                width="18"
+                height="12"
+                rx="3"
+                fill="#ffffff"
+                opacity="0.2"
+              />
+              <rect
+                x="42"
+                y="112"
+                width="47"
+                height="12"
+                rx="3"
+                fill="#ffffff"
+                opacity="0.3"
+              />
+              <rect
+                x="100"
+                y="112"
+                width="18"
+                height="12"
+                rx="3"
+                fill="url(#sb-greenGrad)"
+              />
               <path
                 d="M10 95 L55 50 L90 75 L145 15"
                 fill="none"
@@ -160,11 +213,46 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
               />
               <circle cx="55" cy="50" r="7" fill="#ffffff" />
               <circle cx="90" cy="75" r="7" fill="#ffffff" />
-              <circle cx="145" cy="15" r="9" fill="#10b981" stroke="#ffffff" strokeWidth="4" />
+              <circle
+                cx="145"
+                cy="15"
+                r="9"
+                fill="#10b981"
+                stroke="#ffffff"
+                strokeWidth="4"
+              />
             </g>
-            <text x="185" y="105" fontFamily="system-ui, sans-serif" fontWeight="800" fontSize="100" fill="currentColor" letterSpacing="-3">pos</text>
-            <text x="340" y="105" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="110" fill="url(#sb-greenGrad)" letterSpacing="-1">v3</text>
-            <line x1="190" y1="130" x2="490" y2="130" stroke="currentColor" opacity="0.22" strokeWidth="3" />
+            <text
+              x="185"
+              y="105"
+              fontFamily="system-ui, sans-serif"
+              fontWeight="800"
+              fontSize="100"
+              fill="currentColor"
+              letterSpacing="-3"
+            >
+              pos
+            </text>
+            <text
+              x="340"
+              y="105"
+              fontFamily="system-ui, sans-serif"
+              fontWeight="900"
+              fontSize="110"
+              fill="url(#sb-greenGrad)"
+              letterSpacing="-1"
+            >
+              v3
+            </text>
+            <line
+              x1="190"
+              y1="130"
+              x2="490"
+              y2="130"
+              stroke="currentColor"
+              opacity="0.22"
+              strokeWidth="3"
+            />
           </svg>
         </div>
       </Link>
@@ -222,6 +310,12 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
               label="Reports"
               active={pathname === "/reports"}
             />
+            <SidebarItem
+              href="/shifts"
+              icon={<ListChecks size={20} />}
+              label="Shifts"
+              active={pathname === "/shifts"}
+            />
           </>
         )}
       </nav>
@@ -249,9 +343,10 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
               text-rose-500 bg-white border border-rose-100
               font-medium shadow-sm
               transition-all duration-200 ease-out
-              ${profileOpen
-                ? "opacity-100 translate-y-0 pointer-events-auto"
-                : "opacity-0 -translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto"
+              ${
+                profileOpen
+                  ? "opacity-100 translate-y-0 pointer-events-auto"
+                  : "opacity-0 -translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto"
               }
             `}
           >
@@ -265,14 +360,18 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
             onClick={() => setProfileOpen((o) => !o)}
             className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
           >
-            <div className={`w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shrink-0 ring-2 transition-all ${profileOpen ? "ring-blue-200" : "ring-transparent group-hover:ring-blue-200"}`}>
+            <div
+              className={`w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shrink-0 ring-2 transition-all ${profileOpen ? "ring-blue-200" : "ring-transparent group-hover:ring-blue-200"}`}
+            >
               {fullName ? fullName.charAt(0).toUpperCase() : "U"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {fullName || "User"}
               </p>
-              <p className="text-xs text-slate-500 capitalize">{role || "User"}</p>
+              <p className="text-xs text-slate-500 capitalize">
+                {role || "User"}
+              </p>
             </div>
             {/* Subtle logout hint icon */}
             <LogOut
@@ -303,7 +402,13 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            <linearGradient id="topbar-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient
+              id="topbar-blue"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="100%"
+            >
               <stop offset="0%" stopColor="#3b82f6" />
               <stop offset="100%" stopColor="#1d4ed8" />
             </linearGradient>
@@ -313,13 +418,50 @@ export default function Sidebar({ onNewSaleClick }: SidebarProps) {
             </linearGradient>
           </defs>
           <g transform="translate(10,5)">
-            <path d="M20 30 C20 15,35 0,50 0 L110 0 C125 0,140 15,140 30 L140 120 C140 130,130 140,120 140 L40 140 C25 140,20 125,20 110 Z" fill="url(#topbar-blue)" />
+            <path
+              d="M20 30 C20 15,35 0,50 0 L110 0 C125 0,140 15,140 30 L140 120 C140 130,130 140,120 140 L40 140 C25 140,20 125,20 110 Z"
+              fill="url(#topbar-blue)"
+            />
             <path d="M32 15 H128 V65 H32 Z" fill="#1e293b" opacity="0.9" />
-            <rect x="100" y="112" width="18" height="12" rx="3" fill="url(#topbar-green)" />
-            <path d="M10 95 L55 50 L90 75 L145 15" fill="none" stroke="url(#topbar-green)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+            <rect
+              x="100"
+              y="112"
+              width="18"
+              height="12"
+              rx="3"
+              fill="url(#topbar-green)"
+            />
+            <path
+              d="M10 95 L55 50 L90 75 L145 15"
+              fill="none"
+              stroke="url(#topbar-green)"
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </g>
-          <text x="185" y="105" fontFamily="system-ui,sans-serif" fontWeight="800" fontSize="100" fill="currentColor" letterSpacing="-3">pos</text>
-          <text x="340" y="105" fontFamily="system-ui,sans-serif" fontWeight="900" fontSize="110" fill="url(#topbar-green)" letterSpacing="-1">v3</text>
+          <text
+            x="185"
+            y="105"
+            fontFamily="system-ui,sans-serif"
+            fontWeight="800"
+            fontSize="100"
+            fill="currentColor"
+            letterSpacing="-3"
+          >
+            pos
+          </text>
+          <text
+            x="340"
+            y="105"
+            fontFamily="system-ui,sans-serif"
+            fontWeight="900"
+            fontSize="110"
+            fill="url(#topbar-green)"
+            letterSpacing="-1"
+          >
+            v3
+          </text>
         </svg>
         <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
           {fullName ? fullName.charAt(0).toUpperCase() : "U"}

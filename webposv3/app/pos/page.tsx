@@ -237,6 +237,18 @@ export default function POSDashboard() {
   // F7: complete sale without opening print dialog
   const [noPrint, setNoPrint] = useState(false);
 
+  // --- Shift management states ---
+  const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
+  const [shiftOpeningFloat, setShiftOpeningFloat] = useState<string>("");
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
+  const [isEndShiftModalOpen, setIsEndShiftModalOpen] = useState(false);
+  const [endShiftDeclaredCash, setEndShiftDeclaredCash] = useState<string>("");
+  const [endShiftNotes, setEndShiftNotes] = useState<string>("");
+  const [shiftCashSalesTotal, setShiftCashSalesTotal] = useState<number>(0);
+  const [shiftTxCount, setShiftTxCount] = useState<number>(0);
+  const [openingShift, setOpeningShift] = useState(false);
+  const [closingShift, setClosingShift] = useState(false);
+
   const resetSaleForm = useCallback(() => {
     setCart([]);
     setItemSearch("");
@@ -249,6 +261,124 @@ export default function POSDashboard() {
     setSaleCreditNote("");
     setSalePromiseToPayDate("");
   }, []);
+
+  // --- Shift helpers ---
+  const loadActiveShift = useCallback(async (userId: string, branchId: string) => {
+    const { data, error } = await supabase
+      .from("shifts")
+      .select("id")
+      .eq("cashier_id", userId)
+      .eq("branch_id", branchId)
+      .eq("status", "open")
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") {
+      console.error("Failed to load active shift:", error.message);
+      return null;
+    }
+    return data?.id ?? null;
+  }, []);
+
+  const handleOpenShift = useCallback(async () => {
+    if (!activeBranchId || !currentUserId) return;
+    const float = Number.parseFloat(shiftOpeningFloat);
+    if (!Number.isFinite(float) || float < 0) {
+      alert("Enter a valid opening float (0 or more).");
+      return;
+    }
+    setOpeningShift(true);
+    const { data, error } = await supabase
+      .from("shifts")
+      .insert([{
+        branch_id: activeBranchId,
+        cashier_id: currentUserId,
+        opening_float: float,
+        status: "open",
+      }])
+      .select("id")
+      .single();
+    if (error) {
+      if (error.code === "23505") {
+        alert("You already have an open shift. Refresh the page.");
+      } else if (error.code === "42P01") {
+        alert("Shifts table missing. Run shift_management.sql in Supabase SQL Editor first.");
+      } else {
+        alert(error.message);
+      }
+      setOpeningShift(false);
+      return;
+    }
+    setActiveShiftId(data.id);
+    setShiftOpeningFloat("");
+    setIsOpenShiftModalOpen(false);
+    setOpeningShift(false);
+  }, [activeBranchId, currentUserId, shiftOpeningFloat]);
+
+  const loadShiftStats = useCallback(async (shiftId: string) => {
+    const { data: salesRows } = await supabase
+      .from("sales")
+      .select("id, total")
+      .eq("shift_id", shiftId)
+      .eq("status", "completed");
+
+    const saleIds = (salesRows ?? []).map((s: { id: string }) => s.id);
+    let cashTotal = 0;
+    if (saleIds.length > 0) {
+      const { data: payRows } = await supabase
+        .from("payments")
+        .select("amount, method")
+        .in("sale_id", saleIds);
+      cashTotal = ((payRows ?? []) as { amount: number; method: string | null }[])
+        .filter((p) => p.method?.toLowerCase() === "cash")
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+    }
+    setShiftCashSalesTotal(cashTotal);
+    setShiftTxCount(saleIds.length);
+  }, []);
+
+  const handleEndShift = useCallback(async () => {
+    if (!activeShiftId || !activeBranchId || !currentUserId) return;
+    const declared = Number.parseFloat(endShiftDeclaredCash);
+    if (!Number.isFinite(declared) || declared < 0) {
+      alert("Enter the cash amount you are handing over.");
+      return;
+    }
+    setClosingShift(true);
+    const float = Number.parseFloat(shiftOpeningFloat) || 0;
+    const expected = float + shiftCashSalesTotal;
+    const variance = declared - expected;
+
+    const { error } = await supabase
+      .from("shifts")
+      .update({
+        status: "closed",
+        closed_at: new Date().toISOString(),
+        expected_cash: expected,
+        declared_cash: declared,
+        variance,
+        notes: endShiftNotes.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", activeShiftId);
+
+    if (error) {
+      alert(error.message);
+      setClosingShift(false);
+      return;
+    }
+
+    setActiveShiftId(null);
+    setIsEndShiftModalOpen(false);
+    setEndShiftDeclaredCash("");
+    setEndShiftNotes("");
+    setClosingShift(false);
+    // Sign out after shift close
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+  }, [
+    activeShiftId, activeBranchId, currentUserId,
+    endShiftDeclaredCash, endShiftNotes,
+    shiftOpeningFloat, shiftCashSalesTotal, router,
+  ]);
 
   const refreshDashboardData = useCallback(async () => {
     try {
@@ -489,7 +619,16 @@ export default function POSDashboard() {
         .select("id")
         .limit(1)
         .single();
-      if (branch) setActiveBranchId(branch.id);
+      if (branch) {
+        setActiveBranchId(branch.id);
+        // Load any existing open shift for this cashier
+        const existingShiftId = await loadActiveShift(session.user.id, branch.id);
+        setActiveShiftId(existingShiftId);
+        // If no shift exists, prompt to open one
+        if (!existingShiftId) {
+          setIsOpenShiftModalOpen(true);
+        }
+      }
 
       setCheckingAuth(false);
       await refreshDashboardData();
@@ -497,7 +636,7 @@ export default function POSDashboard() {
       lastLoadedRecentTransactionsPage.current = 1;
     };
     init();
-  }, [refreshDashboardData, router]);
+  }, [refreshDashboardData, router, loadActiveShift]);
 
   useEffect(() => {
     if (checkingAuth || !hasLoadedInitialDashboard.current) return;
@@ -782,6 +921,7 @@ export default function POSDashboard() {
           status: "completed",
           branch_id: activeBranchId,
           user_id: currentUserId,
+          shift_id: activeShiftId ?? null,
           notes:
             paymentMethod === "credit" && saleCustomerName.trim()
               ? `Credit sale for ${saleCustomerName.trim()}`
@@ -954,6 +1094,7 @@ export default function POSDashboard() {
     saleCreditNote,
     salePromiseToPayDate,
     noPrint,
+    activeShiftId,
     resetSaleForm,
     refreshDashboardData,
     ensureCustomerRecord,
@@ -1675,22 +1816,54 @@ printWindow.print();
           <div>
             <h2 className="text-2xl sm:text-3xl font-bold">Dashboard Overview</h2>
             <p className="text-slate-500 mt-1 text-sm">Real-time performance metrics</p>
+            {/* Shift status badge */}
+            {activeShiftId ? (
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Shift Open
+              </span>
+            ) : (
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                No Active Shift
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <button
-            onClick={openNewSaleModal}
-            className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-blue-600 text-white shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm"
-          >
-            <Plus size={18} /> New Sale
-          </button>
-          {creditFeatureReady && (
-            <button
-              onClick={() => setIsCreditModalOpen(true)}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-amber-500 text-white shadow-xl hover:scale-105 transition-all text-sm"
-            >
-              Add Credit
-            </button>
-          )}
+            {!activeShiftId ? (
+              <button
+                onClick={() => setIsOpenShiftModalOpen(true)}
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-emerald-600 text-white shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                Open Shift
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={openNewSaleModal}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-blue-600 text-white shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <Plus size={18} /> New Sale
+                </button>
+                {/* {creditFeatureReady && (
+                  <button
+                    onClick={() => setIsCreditModalOpen(true)}
+                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-amber-500 text-white shadow-xl hover:scale-105 transition-all text-sm"
+                  >
+                    Add Credit
+                  </button>
+                )} */}
+                <button
+                  onClick={async () => {
+                    if (activeShiftId) await loadShiftStats(activeShiftId);
+                    setIsEndShiftModalOpen(true);
+                  }}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-rose-600 text-white shadow-xl hover:scale-105 transition-all text-sm"
+                >
+                  End Shift
+                </button>
+              </>
+            )}
           </div>
         </header>
 
@@ -2042,7 +2215,7 @@ printWindow.print();
                     ref={itemSearchRef}
                     value={itemSearch}
                     onChange={(e) => setItemSearch(e.target.value)}
-                    placeholder="Search item name or barcode"
+                    placeholder="Search item only"
                     className="w-full p-3 pl-9 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
@@ -2637,6 +2810,156 @@ printWindow.print();
           </div>
         </div>
       )}
+      {/* ── Open Shift Modal ─────────────────────────────────────────── */}
+      {isOpenShiftModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <h2 className="text-xl font-bold mb-1">Open Shift</h2>
+            <p className="text-sm text-slate-500 mb-6">
+              Count the starting cash in the drawer and enter the amount below.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">
+                  Opening Float (₱)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 500.00"
+                  value={shiftOpeningFloat}
+                  onChange={(e) => setShiftOpeningFloat(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleOpenShift();
+                    if (["e","E","+","-"].includes(e.key)) e.preventDefault();
+                  }}
+                  autoFocus
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <button
+                onClick={handleOpenShift}
+                disabled={openingShift}
+                className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold text-base hover:bg-emerald-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {openingShift ? <Loader2 size={18} className="animate-spin" /> : null}
+                Start Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── End Shift Modal ───────────────────────────────────────────── */}
+      {isEndShiftModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[95vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-1">End Shift</h2>
+            <p className="text-sm text-slate-500 mb-5">
+              Count your cash drawer and enter the total below. The system will calculate the variance.
+            </p>
+
+            {/* Shift summary */}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2 mb-5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Opening Float</span>
+                <span className="font-semibold">
+                  ₱{(Number.parseFloat(shiftOpeningFloat) || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Cash Sales ({shiftTxCount} tx)</span>
+                <span className="font-semibold text-emerald-600">
+                  + ₱{shiftCashSalesTotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-2 font-bold">
+                <span>Expected in Drawer</span>
+                <span>
+                  ₱{((Number.parseFloat(shiftOpeningFloat) || 0) + shiftCashSalesTotal).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">
+                  Cash You Are Handing Over (₱)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Count your cash..."
+                  value={endShiftDeclaredCash}
+                  onChange={(e) => setEndShiftDeclaredCash(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (["e","E","+","-"].includes(e.key)) e.preventDefault();
+                  }}
+                  autoFocus
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-2xl font-bold outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
+
+              {/* Live variance preview */}
+              {endShiftDeclaredCash !== "" && (
+                (() => {
+                  const expected = (Number.parseFloat(shiftOpeningFloat) || 0) + shiftCashSalesTotal;
+                  const declared = Number.parseFloat(endShiftDeclaredCash) || 0;
+                  const variance = declared - expected;
+                  return (
+                    <div className={`rounded-2xl p-4 text-sm font-semibold flex justify-between ${
+                      variance < 0
+                        ? "bg-rose-50 text-rose-700 border border-rose-100"
+                        : variance > 0
+                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                        : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                    }`}>
+                      <span>Variance</span>
+                      <span>{variance >= 0 ? "+" : ""}₱{variance.toFixed(2)}</span>
+                    </div>
+                  );
+                })()
+              )}
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">
+                  Notes (optional)
+                </label>
+                <textarea
+                  placeholder="Any discrepancy explanation..."
+                  value={endShiftNotes}
+                  onChange={(e) => setEndShiftNotes(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm outline-none focus:ring-2 focus:ring-blue-400 min-h-[72px]"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setIsEndShiftModalOpen(false);
+                    setEndShiftDeclaredCash("");
+                    setEndShiftNotes("");
+                  }}
+                  className="flex-1 py-3 rounded-2xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 transition text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEndShift}
+                  disabled={closingShift || endShiftDeclaredCash === ""}
+                  className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
+                >
+                  {closingShift ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Close Shift & Remit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Shortcut Bar ──────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 hidden sm:flex items-stretch border-t border-slate-200 bg-white text-[10px] font-semibold shadow-lg select-none print:hidden overflow-x-auto">
         {[
