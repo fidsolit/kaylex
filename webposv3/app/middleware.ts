@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const adminOnlyPrefixes = ["/admin", "/products", "/inventory", "/cashiers", "/settings", "/reports"];
+  const adminOnlyPrefixes = ["/admin", "/products", "/inventory", "/cashiers", "/settings", "/reports", "/shifts"];
   const isProtectedRoute =
     pathname.startsWith("/pos") ||
     adminOnlyPrefixes.some((prefix) => pathname.startsWith(prefix));

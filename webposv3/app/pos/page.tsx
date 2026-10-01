@@ -4,14 +4,18 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import {
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eye,
+  LayoutGrid,
+  LayoutList,
   Loader2,
   MoreVertical,
   Plus,
   Printer,
   Search,
+  ShoppingCart,
   X,
 } from "lucide-react";
 import Sidebar from "../components/sidebar";
@@ -170,7 +174,13 @@ interface LowStockItem {
 }
 
 type PaymentMethod = "cash" | "credit";
-// type PaymentMethod= "cash";
+
+// ─── Feature flag ─────────────────────────────────────────────────────────────
+// Toggle NEXT_PUBLIC_ENABLE_CREDIT=true/false in .env to enable or disable
+// the full customer credit feature (on-account sales, credit alerts, credit
+// table on the dashboard). No code changes needed between clients.
+const CREDIT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CREDIT === "true";
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function POSDashboard() {
   const router = useRouter();
@@ -236,6 +246,19 @@ export default function POSDashboard() {
 
   // F7: complete sale without opening print dialog
   const [noPrint, setNoPrint] = useState(false);
+
+  // Product browser view preference — persisted across sessions
+  const [catalogView, setCatalogView] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid";
+    return (localStorage.getItem("pos_catalog_view") as "grid" | "list") ?? "grid";
+  });
+  const toggleCatalogView = () => {
+    setCatalogView((v) => {
+      const next = v === "grid" ? "list" : "grid";
+      localStorage.setItem("pos_catalog_view", next);
+      return next;
+    });
+  };
 
   // --- Shift management states ---
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
@@ -548,37 +571,40 @@ export default function POSDashboard() {
         setSales([]);
       }
 
-      const { data: creditData, error: creditError } = await supabase
-        .from("customer_credits")
-        .select(
-          "id, customer_name, contact_number, amount, note, promise_to_pay_date, is_paid, payment_status, created_at",
-        )
-        .order("created_at", { ascending: false })
-        .limit(10);
+      // Only fetch credit data when the credit feature is enabled
+      if (CREDIT_ENABLED) {
+        const { data: creditData, error: creditError } = await supabase
+          .from("customer_credits")
+          .select(
+            "id, customer_name, contact_number, amount, note, promise_to_pay_date, is_paid, payment_status, created_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(10);
 
-      if (creditError) {
-        if (creditError.code === "42P01" || creditError.code === "42703") {
-          setCreditFeatureReady(false);
-        } else {
-          console.error(
-            "Failed to fetch customer credits:",
-            creditError.message,
-          );
+        if (creditError) {
+          if (creditError.code === "42P01" || creditError.code === "42703") {
+            setCreditFeatureReady(false);
+          } else {
+            console.error(
+              "Failed to fetch customer credits:",
+              creditError.message,
+            );
+          }
+        } else if (creditData) {
+          setCreditFeatureReady(true);
+          setRecentCredits(creditData as CustomerCredit[]);
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const next7Days = new Date(now);
+          next7Days.setDate(next7Days.getDate() + 7);
+
+          const dueSoon = (creditData as CustomerCredit[]).filter((credit) => {
+            if (!credit.promise_to_pay_date || credit.is_paid) return false;
+            const promiseDate = new Date(credit.promise_to_pay_date);
+            return promiseDate >= now && promiseDate <= next7Days;
+          });
+          setDueCreditAlerts(dueSoon);
         }
-      } else if (creditData) {
-        setCreditFeatureReady(true);
-        setRecentCredits(creditData as CustomerCredit[]);
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const next7Days = new Date(now);
-        next7Days.setDate(next7Days.getDate() + 7);
-
-        const dueSoon = (creditData as CustomerCredit[]).filter((credit) => {
-          if (!credit.promise_to_pay_date || credit.is_paid) return false;
-          const promiseDate = new Date(credit.promise_to_pay_date);
-          return promiseDate >= now && promiseDate <= next7Days;
-        });
-        setDueCreditAlerts(dueSoon);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -1527,7 +1553,7 @@ export default function POSDashboard() {
         // F4 — Apply Discount / switch to Credit payment
         case "F4": {
           e.preventDefault();
-          if (isModalOpen && cart.length > 0) {
+          if (CREDIT_ENABLED && isModalOpen && cart.length > 0) {
             setPaymentMethod("credit");
           }
           break;
@@ -1845,14 +1871,14 @@ printWindow.print();
                 >
                   <Plus size={18} /> New Sale
                 </button>
-                {/* {creditFeatureReady && (
+                {CREDIT_ENABLED && creditFeatureReady && (
                   <button
                     onClick={() => setIsCreditModalOpen(true)}
                     className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl font-bold bg-amber-500 text-white shadow-xl hover:scale-105 transition-all text-sm"
                   >
                     Add Credit
                   </button>
-                )} */}
+                )}
                 <button
                   onClick={async () => {
                     if (activeShiftId) await loadShiftStats(activeShiftId);
@@ -2050,6 +2076,8 @@ printWindow.print();
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+          {/* Promise-to-Pay alerts — credit feature only */}
+          {CREDIT_ENABLED && (
           <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-50">
               <h3 className="text-lg font-bold">Promise-to-Pay Due Alerts</h3>
@@ -2084,6 +2112,7 @@ printWindow.print();
               )}
             </div>
           </div>
+          )} {/* end CREDIT_ENABLED — Promise-to-Pay alerts */}
 
           <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-50">
@@ -2114,7 +2143,8 @@ printWindow.print();
           </div>
         </div>
 
-        {creditFeatureReady && (
+        {/* Recent Customer Credit table — credit feature only */}
+        {CREDIT_ENABLED && creditFeatureReady && (
           <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mt-8">
             <div className="p-8 border-b border-slate-50">
               <h3 className="text-lg font-bold">Recent Customer Credit</h3>
@@ -2186,45 +2216,88 @@ printWindow.print();
         )}
       </main>
 
-      {/* --- NEW SALE MODAL --- */}
+      {/* ═══════════════════════════════════════════════════════════════
+           NEW SALE — Full-screen professional POS modal
+      ════════════════════════════════════════════════════════════════ */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 w-full sm:max-w-5xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 sm:zoom-in duration-200 max-h-[95vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">New Sale</h2>
-              <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  resetSaleForm();
-                }}
-                className="p-2 hover:bg-slate-100 rounded-full"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-100">
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <input
-                    autoFocus
-                    ref={itemSearchRef}
-                    value={itemSearch}
-                    onChange={(e) => setItemSearch(e.target.value)}
-                    placeholder="Search item only"
-                    className="w-full p-3 pl-9 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600"
-                  />
+          {/* ── Top bar ─────────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between bg-slate-900 px-5 py-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                <ShoppingCart size={16} className="text-white" />
+              </div>
+              <span className="text-white font-bold text-lg tracking-tight">New Sale</span>
+              {cart.length > 0 && (
+                <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                  {cart.reduce((s, i) => s + i.quantity, 0)} items
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => { setIsModalOpen(false); resetSaleForm(); }}
+              className="flex items-center gap-2 rounded-xl bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition"
+            >
+              <X size={16} />
+              Cancel (Esc)
+            </button>
+          </div>
+
+          {/* ── Body: two-panel layout ───────────────────────────────────── */}
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+
+            {/* LEFT — Item browser */}
+            <div className="flex flex-col w-full lg:w-[420px] xl:w-[460px] shrink-0 bg-white border-r border-slate-200">
+
+              {/* Search inputs + view toggle */}
+              <div className="p-4 border-b border-slate-100 space-y-2 shrink-0">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      autoFocus
+                      ref={itemSearchRef}
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      placeholder="Search by name…"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {/* Grid / List toggle */}
+                  <div className="flex rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setCatalogView("grid"); localStorage.setItem("pos_catalog_view", "grid"); }}
+                      title="Grid view"
+                      className={`flex items-center justify-center w-10 h-10 transition ${
+                        catalogView === "grid"
+                          ? "bg-blue-600 text-white"
+                          : "text-slate-400 hover:bg-slate-100"
+                      }`}
+                    >
+                      <LayoutGrid size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setCatalogView("list"); localStorage.setItem("pos_catalog_view", "list"); }}
+                      title="List view"
+                      className={`flex items-center justify-center w-10 h-10 transition ${
+                        catalogView === "list"
+                          ? "bg-blue-600 text-white"
+                          : "text-slate-400 hover:bg-slate-100"
+                      }`}
+                    >
+                      <LayoutList size={16} />
+                    </button>
+                  </div>
                 </div>
                 <input
                   ref={barcodeInputRef}
                   value={barcodeInput}
                   onChange={(e) => handleBarcodeChange(e.target.value)}
-                  placeholder="Scan barcode (auto-adds)"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="📷  Scan barcode — auto-adds to cart"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -2236,206 +2309,328 @@ printWindow.print();
                     }
                   }}
                 />
-                <div className="max-h-80 overflow-y-auto border border-slate-100 rounded-xl">
-                  {filteredCatalogItems.length > 0 ? (
-                    filteredCatalogItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => addItemToCart(item)}
-                        className="w-full text-left px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-semibold">{item.name}</p>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              </div>
+
+              {/* Product browser — grid or list */}
+              <div className="flex-1 overflow-y-auto p-3">
+                {filteredCatalogItems.length > 0 ? (
+                  catalogView === "grid" ? (
+                    /* ── Grid view ─────────────────────────────────────── */
+                    <div className="grid grid-cols-2 gap-2">
+                      {filteredCatalogItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => addItemToCart(item)}
+                          className="group relative flex flex-col items-start rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50 active:scale-[0.97]"
+                        >
+                          <span className="mb-1.5 rounded-full bg-slate-200 group-hover:bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 group-hover:text-blue-600 transition">
                             {item.product_type}
                           </span>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          {item.barcode || "No barcode"} - ₱
-                          {Number(item.price).toFixed(2)}
-                        </p>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="p-4 text-sm text-slate-400">
-                      No matching products.
-                    </p>
-                  )}
-                </div>
-              </div>
-              {/* //cart code */}
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-                <h3 className="font-bold mb-3">Cart</h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {cart.length > 0 ? (
-                    cart.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bg-white rounded-lg p-3 border border-slate-100"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <p className="font-medium text-sm">{item.name}</p>
-                            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                              {item.product_type}
-                            </p>
-                          </div>
-                          <p className="text-sm font-bold">
-                            ₱{(Number(item.price) * item.quantity).toFixed(2)}
+                          <p className="font-semibold text-sm text-slate-800 leading-tight line-clamp-2">
+                            {item.name}
                           </p>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-slate-500">
-                            ₱{Number(item.price).toFixed(2)} each
+                          {item.barcode && (
+                            <p className="mt-1 text-[10px] text-slate-400 font-mono">{item.barcode}</p>
+                          )}
+                          <p className="mt-2 text-base font-black text-blue-600">
+                            ₱{Number(item.price).toFixed(2)}
                           </p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() =>
-                                handleQuantityChange(item.id, item.quantity - 1)
-                              }
-                              className="h-7 w-7 rounded bg-slate-100"
-                            >
-                              -
-                            </button>
-                            <span className="text-sm w-6 text-center">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() =>
-                                handleQuantityChange(item.id, item.quantity + 1)
-                              }
-                              className="h-7 w-7 rounded bg-slate-100"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">Cart is empty.</p>
-                  )}
-                </div>
-                <div className="border-t border-slate-200 mt-4 pt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal</span>
-                    <span>₱{cartSubtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
-                    <span>₱{cartSubtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="space-y-2">
-                      {/* <label className="block text-sm font-semibold text-slate-600">
-                        Payment Method
-                      </label> */}
-                      {/* <select
-                        value={paymentMethod}
-                        disabled={true}
-                        onChange={(e) =>
-                          setPaymentMethod(e.target.value as PaymentMethod)
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition-all focus:ring-2 focus:ring-blue-600"
-                      >
-                        <option value="cash">Cash</option>
-                        <option value="credit">Credit</option>
-                      </select> */}
+                          <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-blue-500">
+                            <Plus size={16} />
+                          </span>
+                        </button>
+                      ))}
                     </div>
+                  ) : (
+                    /* ── List view ─────────────────────────────────────── */
+                    <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100 overflow-hidden bg-white">
+                      {filteredCatalogItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => addItemToCart(item)}
+                          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-blue-50 active:bg-blue-100"
+                        >
+                          {/* Price pill — prominent on the left */}
+                          <span className="shrink-0 rounded-xl bg-blue-600 px-2.5 py-1 text-sm font-black text-white tabular-nums min-w-[72px] text-center">
+                            ₱{Number(item.price).toFixed(2)}
+                          </span>
 
-                    {paymentMethod === "cash" ? (
-                      <>
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Cash</span>
-                          <input
-                            ref={cashInputRef}
-                            type="number"
-                            step="any"
-                            placeholder="0.00"
-                            value={cashAmount}
-                            onKeyDown={(e) => {
-                              if (["e", "E", "+", "-"].includes(e.key)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                                setCashAmount(val);
-                                setchange(Number(val) - cartSubtotal);
-                              }
-                            }}
-                            className={`w-50 rounded-xl border bg-slate-50 p-2 outline-none transition-all focus:ring-2 ${
-                              Number(cashAmount) < cartSubtotal &&
-                              cashAmount !== ""
-                                ? "border-red-500 focus:ring-red-200"
-                                : "border-slate-200 focus:ring-blue-600"
-                            }`}
-                          />
-                        </div>
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Change</span>
-                          <span>PHP {change.toFixed(2)}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="space-y-3">
-                        <input
-                          placeholder="Customer name"
-                          value={saleCustomerName}
-                          onChange={(e) => setSaleCustomerName(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none focus:ring-2 focus:ring-blue-600"
-                        />
-                        <input
-                          placeholder="Contact number (optional)"
-                          value={saleCustomerContact}
-                          onChange={(e) =>
-                            setSaleCustomerContact(e.target.value)
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none focus:ring-2 focus:ring-blue-600"
-                        />
-                        <textarea
-                          placeholder="Credit note (optional)"
-                          value={saleCreditNote}
-                          onChange={(e) => setSaleCreditNote(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none focus:ring-2 focus:ring-blue-600"
-                        />
-                        <div>
-                          <label className="mb-1 block text-sm font-semibold text-slate-600">
-                            Promise to Pay Date (optional)
-                          </label>
-                          <input
-                            type="date"
-                            value={salePromiseToPayDate}
-                            onChange={(e) =>
-                              setSalePromiseToPayDate(e.target.value)
-                            }
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none focus:ring-2 focus:ring-blue-600"
-                          />
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          If this customer is not registered yet, they will be
-                          added automatically when the sale is completed.
-                        </p>
-                      </div>
-                    )}
+                          {/* Name + meta */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-slate-800 truncate leading-tight">
+                              {item.name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="rounded-full bg-slate-100 group-hover:bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 group-hover:text-blue-600 transition">
+                                {item.product_type}
+                              </span>
+                              {item.barcode && (
+                                <span className="text-[10px] font-mono text-slate-400 truncate">
+                                  {item.barcode}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Add icon */}
+                          <span className="shrink-0 rounded-lg p-1.5 text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition">
+                            <Plus size={15} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-400 text-sm">
+                    No products match your search.
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT — Cart + payment */}
+            <div className="flex flex-col flex-1 min-w-0">
+
+              {/* Cart table */}
+              <div className="flex-1 overflow-y-auto">
+                {cart.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+                    <ShoppingCart size={48} strokeWidth={1} />
+                    <p className="text-sm font-medium">Cart is empty — add items from the left</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-200/80 backdrop-blur-sm">
+                      <tr>
+                        <th className="px-5 py-3 text-left font-semibold text-slate-600 w-full">Item</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-600 whitespace-nowrap">Qty</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">Unit Price</th>
+                        <th className="px-5 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">Subtotal</th>
+                        <th className="px-3 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {cart.map((item, idx) => (
+                        <tr
+                          key={item.id}
+                          className={`group transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}
+                        >
+                          {/* Item name + badge */}
+                          <td className="px-5 py-4">
+                            <p className="font-semibold text-slate-800">{item.name}</p>
+                            <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 mt-0.5">
+                              {item.product_type}
+                            </span>
+                          </td>
+
+                          {/* Quantity stepper */}
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                                className="h-8 w-8 rounded-lg bg-slate-200 hover:bg-rose-100 hover:text-rose-600 font-bold text-lg leading-none transition flex items-center justify-center"
+                              >
+                                −
+                              </button>
+                              <span className="w-10 text-center text-base font-bold text-slate-800 tabular-nums">
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                                className="h-8 w-8 rounded-lg bg-slate-200 hover:bg-emerald-100 hover:text-emerald-700 font-bold text-lg leading-none transition flex items-center justify-center"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Unit price */}
+                          <td className="px-4 py-4 text-right text-slate-600 tabular-nums font-medium">
+                            ₱{Number(item.price).toFixed(2)}
+                          </td>
+
+                          {/* Line subtotal */}
+                          <td className="px-5 py-4 text-right font-bold text-slate-900 tabular-nums text-base">
+                            ₱{(Number(item.price) * item.quantity).toFixed(2)}
+                          </td>
+
+                          {/* Remove */}
+                          <td className="px-3 py-4">
+                            <button
+                              onClick={() => handleQuantityChange(item.id, 0)}
+                              className="rounded-lg p-1.5 text-slate-300 hover:bg-rose-100 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"
+                            >
+                              <X size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Payment panel — pinned to bottom */}
+              <div className="shrink-0 border-t-2 border-slate-200 bg-white">
+
+                {/* Payment method tabs */}
+                <div className="flex border-b border-slate-100">
+                  <button
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`flex-1 py-3 text-sm font-bold transition ${
+                      paymentMethod === "cash"
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-500 hover:bg-slate-50"
+                    }`}
+                  >
+                    💵 Cash
+                  </button>
+                  {/* Credit tab — only shown when CREDIT_ENABLED=true in .env */}
+                  {CREDIT_ENABLED && (
+                    <button
+                      onClick={() => setPaymentMethod("credit")}
+                      className={`flex-1 py-3 text-sm font-bold transition ${
+                        paymentMethod === "credit"
+                          ? "bg-amber-500 text-white"
+                          : "text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      🧾 Credit
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-5 space-y-3">
+                  {/* Totals row */}
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-slate-500 font-medium">Total</span>
+                    <span className="text-4xl font-black text-slate-900 tabular-nums tracking-tight">
+                      ₱{cartSubtotal.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {paymentMethod === "cash" ? (
+                    <div className="space-y-3">
+                      {/* Cash tendered */}
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-semibold text-slate-600 whitespace-nowrap w-28">
+                          Cash Tendered
+                        </label>
+                        <input
+                          ref={cashInputRef}
+                          type="number"
+                          step="any"
+                          placeholder="0.00"
+                          value={cashAmount}
+                          autoFocus={paymentMethod === "cash"}
+                          onKeyDown={(e) => {
+                            if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+                            if (e.key === "Enter" && Number(cashAmount) >= cartSubtotal) {
+                              void handleAddNewSale();
+                            }
+                          }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                              setCashAmount(val);
+                              setchange(Number(val) - cartSubtotal);
+                            }
+                          }}
+                          className={`flex-1 rounded-xl border-2 bg-slate-50 p-3 text-2xl font-black text-right tabular-nums outline-none transition ${
+                            cashAmount !== "" && Number(cashAmount) < cartSubtotal
+                              ? "border-rose-400 focus:border-rose-500 text-rose-600"
+                              : "border-slate-200 focus:border-blue-500"
+                          }`}
+                        />
+                      </div>
+
+                      {/* Change */}
+                      <div className={`flex items-center justify-between rounded-2xl px-4 py-3 ${
+                        change >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"
+                      }`}>
+                        <span className="font-semibold text-sm text-slate-600">Change</span>
+                        <span className={`text-3xl font-black tabular-nums ${
+                          change >= 0 ? "text-emerald-600" : "text-rose-600"
+                        }`}>
+                          ₱{change.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* Quick cash buttons */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {[20, 50, 100, 200, 500, 1000, Math.ceil(cartSubtotal / 100) * 100, cartSubtotal]
+                          .filter((v, i, a) => v >= cartSubtotal && a.indexOf(v) === i)
+                          .slice(0, 4)
+                          .map((amount) => (
+                            <button
+                              key={amount}
+                              onClick={() => {
+                                setCashAmount(amount.toFixed(2));
+                                setchange(amount - cartSubtotal);
+                              }}
+                              className="rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition"
+                            >
+                              ₱{amount % 1 === 0 ? amount : amount.toFixed(2)}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  ) : CREDIT_ENABLED ? (
+                    /* Credit fields — only rendered when CREDIT_ENABLED=true */
+                    <div className="space-y-2">
+                      <input
+                        placeholder="Customer name *"
+                        value={saleCustomerName}
+                        onChange={(e) => setSaleCustomerName(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          placeholder="Contact (optional)"
+                          value={saleCustomerContact}
+                          onChange={(e) => setSaleCustomerContact(e.target.value)}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                        <input
+                          type="date"
+                          value={salePromiseToPayDate}
+                          onChange={(e) => setSalePromiseToPayDate(e.target.value)}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                      </div>
+                      <textarea
+                        placeholder="Credit note (optional)"
+                        value={saleCreditNote}
+                        onChange={(e) => setSaleCreditNote(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                      />
+                    </div>
+                  ) : null}
+
+                  {/* Charge button */}
                   <button
                     disabled={
                       submittingSale ||
                       cart.length === 0 ||
-                      (paymentMethod === "cash" &&
-                        Number(cashAmount) < cartSubtotal) ||
-                      (paymentMethod === "credit" && !saleCustomerName.trim())
+                      (paymentMethod === "cash" && Number(cashAmount) < cartSubtotal) ||
+                      (CREDIT_ENABLED && paymentMethod === "credit" && !saleCustomerName.trim())
                     }
                     onClick={handleAddNewSale}
-                    className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
+                    className={`w-full py-4 rounded-2xl font-black text-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg ${
+                      paymentMethod === "credit"
+                        ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200"
+                        : "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
+                    }`}
                   >
-                    {submittingSale
-                      ? "Processing..."
-                      : paymentMethod === "credit"
-                        ? "Complete Credit Sale"
-                        : "Complete Sale"}
+                    {submittingSale ? (
+                      <Loader2 size={22} className="animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={22} />
+                        {paymentMethod === "credit" ? "Complete Credit Sale" : `Charge ₱${cartSubtotal.toFixed(2)}`}
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2444,7 +2639,8 @@ printWindow.print();
         </div>
       )}
 
-      {isCreditModalOpen && (
+      {/* Add Customer Credit modal — credit feature only */}
+      {CREDIT_ENABLED && isCreditModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 w-full sm:max-w-md shadow-2xl animate-in fade-in slide-in-from-bottom-4 sm:zoom-in duration-200 max-h-[95vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
