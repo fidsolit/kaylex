@@ -59,6 +59,7 @@ interface ProductCatalogItem {
   cost: number;
   barcode: string | null;
   product_type: "product" | "service";
+  outOfStock?: boolean;   // true when product exists but has 0 stock in this branch
 }
 
 interface CartItem extends ProductCatalogItem {
@@ -243,9 +244,15 @@ export default function POSDashboard() {
   const cashInputRef = useRef<HTMLInputElement | null>(null);
   const transactionsTableRef = useRef<HTMLDivElement | null>(null);
   const lastCartItemQtyRef = useRef<HTMLInputElement | null>(null);
+  const itemSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // F7: complete sale without opening print dialog
   const [noPrint, setNoPrint] = useState(false);
+
+  // Catalog pagination state
+  const catalogPageSize = 10;
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogTotalCount, setCatalogTotalCount] = useState(0);
 
   // Product browser view preference — persisted across sessions
   const [catalogView, setCatalogView] = useState<"grid" | "list">(() => {
@@ -679,38 +686,60 @@ export default function POSDashboard() {
   }, [checkingAuth, recentTransactionsPage, refreshDashboardData]);
 
   // --- 3. Actions ---
-  const loadCatalogItems = useCallback(async () => {
+  const loadCatalogItems = useCallback(async (page = 1, search = "") => {
     if (!activeBranchId) return;
-    const { data, error } = await supabase
+
+    const from = (page - 1) * catalogPageSize;
+    const to = from + catalogPageSize - 1;
+    const trimmed = search.trim();
+
+    // Build inventory query with optional search filter
+    let inventoryQuery = supabase
       .from("inventory")
       .select(
-        `
-        stock,
-        products (
+        `stock,
+        products!inner (
           id,
           name,
           price,
           cost,
           barcode,
           product_type
-        )
-      `,
+        )`,
+        { count: "exact" },
       )
       .eq("branch_id", activeBranchId)
-      .gt("stock", 0)
-      .order("updated_at", { ascending: false });
+      .eq("products.product_type", "product")
+      .order("updated_at", { ascending: false })
+      .range(from, to);
 
-    const { data: serviceData, error: serviceError } = await supabase
+    if (trimmed) {
+      inventoryQuery = inventoryQuery.or(
+        `name.ilike.%${trimmed}%,barcode.ilike.%${trimmed}%`,
+        { foreignTable: "products" },
+      );
+    }
+
+    // Services are fetched separately — no inventory row needed
+    let servicesQuery = supabase
       .from("products")
       .select("id, name, price, cost, barcode, product_type")
       .eq("product_type", "service")
       .order("updated_at", { ascending: false });
 
+    if (trimmed) {
+      servicesQuery = servicesQuery.or(
+        `name.ilike.%${trimmed}%,barcode.ilike.%${trimmed}%`,
+      );
+    }
+
+    const [{ data, error, count }, { data: serviceData, error: serviceError }] =
+      await Promise.all([inventoryQuery, servicesQuery]);
+
     if (error) {
       console.error("Failed loading catalog:", error.message);
       return;
     }
-
     if (serviceError) {
       console.error("Failed loading services:", serviceError.message);
       return;
@@ -719,27 +748,17 @@ export default function POSDashboard() {
     const rows = (data ?? []) as {
       stock: number;
       products:
-        | {
-            id: string;
-            name: string;
-            price: number;
-            cost: number;
-            barcode: string | null;
-          }
-        | {
-            id: string;
-            name: string;
-            price: number;
-            cost: number;
-            barcode: string | null;
-          }[]
+        | { id: string; name: string; price: number; cost: number; barcode: string | null; product_type: "product" | "service" }
+        | { id: string; name: string; price: number; cost: number; barcode: string | null; product_type: "product" | "service" }[]
         | null;
     }[];
 
-    const stockedItems = rows
-      .map((row) =>
-        Array.isArray(row.products) ? row.products[0] : row.products,
-      )
+    const stockedItems: ProductCatalogItem[] = rows
+      .map((row) => {
+        const p = Array.isArray(row.products) ? row.products[0] : row.products;
+        if (!p) return null;
+        return { ...p, outOfStock: Number(row.stock) <= 0 } as ProductCatalogItem;
+      })
       .filter((p): p is ProductCatalogItem => Boolean(p));
 
     const serviceItems = ((serviceData ?? []) as ProductCatalogItem[]) ?? [];
@@ -749,12 +768,16 @@ export default function POSDashboard() {
     );
 
     setCatalogItems(uniqueItems);
-  }, [activeBranchId]);
+    setCatalogPage(page);
+    setCatalogTotalCount(count ?? 0);
+  }, [activeBranchId, catalogPageSize]);
 
   const openNewSaleModal = useCallback(async () => {
     resetSaleForm();
+    setCatalogPage(1);
+    setCatalogTotalCount(0);
     setIsModalOpen(true);
-    await loadCatalogItems();
+    await loadCatalogItems(1, "");
   }, [resetSaleForm, loadCatalogItems]);
 
   const ensureCustomerRecord = useCallback(
@@ -828,6 +851,10 @@ export default function POSDashboard() {
   );
 
   const addItemToCart = (item: ProductCatalogItem) => {
+    if (item.outOfStock) {
+      alert(`"${item.name}" is out of stock. Receive a delivery in Inventory to restock it.`);
+      return;
+    }
     setCart((current) => {
       const existing = current.find((c) => c.id === item.id);
       if (existing) {
@@ -840,13 +867,45 @@ export default function POSDashboard() {
   };
 
   const handleBarcodeAdd = (code?: string) => {
-    const resolvedCode = (code ?? barcodeInput).trim();
+    // Sanitize: trim whitespace AND strip carriage returns some scanners append
+    const resolvedCode = (code ?? barcodeInput).trim().replace(/\r/g, "");
     if (!resolvedCode) return;
-    const matched = catalogItems.find((item) => item.barcode === resolvedCode);
+
+    // Case-insensitive match so scanner output casing never matters
+    const normalised = resolvedCode.toLowerCase();
+    const matched = catalogItems.find(
+      (item) => item.barcode?.toLowerCase() === normalised,
+    );
+
     if (!matched) {
-      alert("Barcode not found in available items.");
+      // Product may exist in DB but not in this branch's inventory at all
+      void supabase
+        .from("products")
+        .select("id, name, barcode, product_type")
+        .ilike("barcode", resolvedCode)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            alert(
+              `"${data.name}" was found in products but is not available in this branch's inventory (possibly out of stock). Add stock via Inventory → Receive Delivery.`,
+            );
+          } else {
+            alert(
+              `Barcode "${resolvedCode}" not found. Check that the barcode is saved correctly in Products.`,
+            );
+          }
+        });
+      setBarcodeInput("");
       return;
     }
+
+    // Product found but out of stock in this branch
+    if (matched.outOfStock) {
+      alert(`"${matched.name}" is out of stock. Receive a delivery in Inventory to restock it.`);
+      setBarcodeInput("");
+      return;
+    }
+
     addItemToCart(matched);
     setBarcodeInput("");
   };
@@ -855,11 +914,13 @@ export default function POSDashboard() {
   // fast then stop — 120 ms idle is enough to distinguish scanner from manual)
   const barcodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleBarcodeChange = (value: string) => {
-    setBarcodeInput(value);
+    // Strip carriage returns that some scanners append before the debounce fires
+    const cleaned = value.replace(/\r/g, "");
+    setBarcodeInput(cleaned);
     if (barcodeDebounceRef.current) clearTimeout(barcodeDebounceRef.current);
-    if (!value.trim()) return;
+    if (!cleaned.trim()) return;
     barcodeDebounceRef.current = setTimeout(() => {
-      handleBarcodeAdd(value.trim());
+      handleBarcodeAdd(cleaned.trim());
     }, 120);
   };
 
@@ -1127,14 +1188,14 @@ export default function POSDashboard() {
   ]);
 
 
-  const filteredCatalogItems = catalogItems.filter((item) => {
-    const q = itemSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.barcode?.toLowerCase().includes(q)
-    );
+  // Catalog items are now server-paginated — catalogItems already contains
+  // the filtered + paginated slice. Sort in-stock before out-of-stock.
+  const filteredCatalogItems = [...catalogItems].sort((a, b) => {
+    if (a.outOfStock === b.outOfStock) return 0;
+    return a.outOfStock ? 1 : -1;
   });
+
+  const catalogTotalPages = Math.max(1, Math.ceil(catalogTotalCount / catalogPageSize));
 
   const handleAddCustomerCredit = async () => {
     if (!activeBranchId || !currentUserId) {
@@ -2259,8 +2320,17 @@ printWindow.print();
                       autoFocus
                       ref={itemSearchRef}
                       value={itemSearch}
-                      onChange={(e) => setItemSearch(e.target.value)}
-                      placeholder="Search by name…"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setItemSearch(val);
+                        // Debounce server re-fetch so we don't fire on every keystroke
+                        if (itemSearchDebounceRef.current) clearTimeout(itemSearchDebounceRef.current);
+                        itemSearchDebounceRef.current = window.setTimeout(() => {
+                          setCatalogPage(1);
+                          void loadCatalogItems(1, val);
+                        }, 250);
+                      }}
+                      placeholder="Search by name or barcode…"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -2321,23 +2391,41 @@ printWindow.print();
                         <button
                           key={item.id}
                           onClick={() => addItemToCart(item)}
-                          className="group relative flex flex-col items-start rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50 active:scale-[0.97]"
+                          disabled={item.outOfStock}
+                          className={`group relative flex flex-col items-start rounded-2xl border p-3 text-left transition active:scale-[0.97] ${
+                            item.outOfStock
+                              ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
+                              : "border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50"
+                          }`}
                         >
-                          <span className="mb-1.5 rounded-full bg-slate-200 group-hover:bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 group-hover:text-blue-600 transition">
-                            {item.product_type}
-                          </span>
+                          <div className="flex w-full items-center justify-between mb-1.5 gap-1">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                              item.outOfStock
+                                ? "bg-slate-200 text-slate-400"
+                                : "bg-slate-200 group-hover:bg-blue-100 text-slate-500 group-hover:text-blue-600"
+                            }`}>
+                              {item.product_type}
+                            </span>
+                            {item.outOfStock && (
+                              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-500">
+                                Out of stock
+                              </span>
+                            )}
+                          </div>
                           <p className="font-semibold text-sm text-slate-800 leading-tight line-clamp-2">
                             {item.name}
                           </p>
                           {item.barcode && (
                             <p className="mt-1 text-[10px] text-slate-400 font-mono">{item.barcode}</p>
                           )}
-                          <p className="mt-2 text-base font-black text-blue-600">
+                          <p className={`mt-2 text-base font-black ${item.outOfStock ? "text-slate-400" : "text-blue-600"}`}>
                             ₱{Number(item.price).toFixed(2)}
                           </p>
-                          <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-blue-500">
-                            <Plus size={16} />
-                          </span>
+                          {!item.outOfStock && (
+                            <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition text-blue-500">
+                              <Plus size={16} />
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -2348,10 +2436,17 @@ printWindow.print();
                         <button
                           key={item.id}
                           onClick={() => addItemToCart(item)}
-                          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-blue-50 active:bg-blue-100"
+                          disabled={item.outOfStock}
+                          className={`group flex w-full items-center gap-3 px-4 py-3 text-left transition ${
+                            item.outOfStock
+                              ? "opacity-50 cursor-not-allowed bg-white"
+                              : "hover:bg-blue-50 active:bg-blue-100"
+                          }`}
                         >
-                          {/* Price pill — prominent on the left */}
-                          <span className="shrink-0 rounded-xl bg-blue-600 px-2.5 py-1 text-sm font-black text-white tabular-nums min-w-[72px] text-center">
+                          {/* Price pill */}
+                          <span className={`shrink-0 rounded-xl px-2.5 py-1 text-sm font-black tabular-nums min-w-[72px] text-center ${
+                            item.outOfStock ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white"
+                          }`}>
                             ₱{Number(item.price).toFixed(2)}
                           </span>
 
@@ -2361,7 +2456,11 @@ printWindow.print();
                               {item.name}
                             </p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="rounded-full bg-slate-100 group-hover:bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 group-hover:text-blue-600 transition">
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                                item.outOfStock
+                                  ? "bg-slate-100 text-slate-400"
+                                  : "bg-slate-100 group-hover:bg-blue-100 text-slate-400 group-hover:text-blue-600"
+                              }`}>
                                 {item.product_type}
                               </span>
                               {item.barcode && (
@@ -2369,13 +2468,20 @@ printWindow.print();
                                   {item.barcode}
                                 </span>
                               )}
+                              {item.outOfStock && (
+                                <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-500">
+                                  Out of stock
+                                </span>
+                              )}
                             </div>
                           </div>
 
                           {/* Add icon */}
-                          <span className="shrink-0 rounded-lg p-1.5 text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition">
-                            <Plus size={15} />
-                          </span>
+                          {!item.outOfStock && (
+                            <span className="shrink-0 rounded-lg p-1.5 text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition">
+                              <Plus size={15} />
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -2386,6 +2492,40 @@ printWindow.print();
                   </div>
                 )}
               </div>
+
+              {/* Catalog pagination */}
+              {catalogTotalPages > 1 && (
+                <div className="shrink-0 flex items-center justify-between border-t border-slate-100 px-4 py-2 bg-white">
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    Page {catalogPage} / {catalogTotalPages}
+                    <span className="ml-1 text-slate-300">({catalogTotalCount} items)</span>
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      disabled={catalogPage <= 1}
+                      onClick={() => {
+                        const p = catalogPage - 1;
+                        void loadCatalogItems(p, itemSearch);
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ← Prev
+                    </button>
+                    <button
+                      type="button"
+                      disabled={catalogPage >= catalogTotalPages}
+                      onClick={() => {
+                        const p = catalogPage + 1;
+                        void loadCatalogItems(p, itemSearch);
+                      }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* RIGHT — Cart + payment */}
