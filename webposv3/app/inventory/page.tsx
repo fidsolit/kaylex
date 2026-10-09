@@ -91,6 +91,8 @@ export default function Inventory() {
   const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
   const [activeBranchName, setActiveBranchName] = useState("Loading branch...");
   const [inventoryPage, setInventoryPage] = useState(1);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventorySearchInput, setInventorySearchInput] = useState("");
 
   const [newItem, setNewItem] = useState(DEFAULT_NEW_ITEM_FORM);
   const [variantForm, setVariantForm] = useState(DEFAULT_VARIANT_FORM);
@@ -103,44 +105,105 @@ export default function Inventory() {
   const inventoryPageSize = 10;
   const inventoryTableRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchInventory = useCallback(async (branchId: string, page = 1) => {
-    const from = (page - 1) * inventoryPageSize;
-    const to = from + inventoryPageSize - 1;
+  const fetchInventory = useCallback(
+    async (branchId: string, page = 1, search = "") => {
+      const from = (page - 1) * inventoryPageSize;
+      const to = from + inventoryPageSize - 1;
+      const normalizedSearch = search.trim();
 
-    const { data, error, count } = await supabase
-      .from("inventory")
-      .select(
-        `
-          id,
-          stock,
-          min_stock,
-          branch_id,
-          products (
+      // Search product names and barcodes first, then filter this branch's inventory.
+      let matchingProductIds: string[] | null = null;
+      if (normalizedSearch) {
+        const pattern = `%${normalizedSearch}%`;
+        const [nameResult, barcodeResult] = await Promise.all([
+          supabase.from("products").select("id").ilike("name", pattern).limit(10),
+          supabase.from("products").select("id").ilike("barcode", pattern).limit(10),
+        ]);
+
+        if (nameResult.error || barcodeResult.error) {
+          console.error(
+            "Product search error:",
+            nameResult.error?.message ?? barcodeResult.error?.message,
+          );
+          return;
+        }
+
+        matchingProductIds = Array.from(
+          new Set([
+            ...(nameResult.data ?? []).map((product) => product.id),
+            ...(barcodeResult.data ?? []).map((product) => product.id),
+          ]),
+        );
+
+        if (matchingProductIds.length === 0) {
+          setItems([]);
+          setInventoryTotalCount(0);
+          setInventoryPage(1);
+          return;
+        }
+      }
+
+      let inventoryQuery = supabase
+        .from("inventory")
+        .select(
+          `
             id,
-            name,
-            price,
-            cost,
-            barcode,
-            product_type
-          )
-        `,
-        { count: "exact" },
-      )
-      .eq("branch_id", branchId)
-      .order("updated_at", { ascending: false })
-      .range(from, to);
+            stock,
+            min_stock,
+            branch_id,
+            products (
+              id,
+              name,
+              price,
+              cost,
+              barcode,
+              product_type
+            )
+          `,
+          { count: "exact" },
+        )
+        .eq("branch_id", branchId);
 
-    if (error) {
-      console.error("Supabase Error:", error.message);
-      return;
-    }
+      if (matchingProductIds) {
+        inventoryQuery = inventoryQuery.in("product_id", matchingProductIds);
+      }
 
-    setInventoryPage(page);
-    if (count !== null) {
-      setInventoryTotalCount(count);
-    }
-    setItems(normalizeInventoryRows((data as InventoryRow[]) ?? []));
-  }, []);
+      const { data, error, count } = await inventoryQuery
+        .order("updated_at", { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        console.error("Supabase Error:", error.message);
+        return;
+      }
+
+      setInventoryPage(page);
+      setInventoryTotalCount(count ?? 0);
+      setItems(normalizeInventoryRows((data as InventoryRow[]) ?? []));
+    },
+    [],
+  );
+
+  const handleInventorySearch = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    if (!activeBranchId) return;
+
+    const query = inventorySearchInput.trim();
+    setInventorySearch(query);
+    setShowLowStockOnly(false);
+    setHighlightedItemId(null);
+    await fetchInventory(activeBranchId, 1, query);
+  };
+
+  const clearInventorySearch = async () => {
+    setInventorySearchInput("");
+    setInventorySearch("");
+    setShowLowStockOnly(false);
+    setHighlightedItemId(null);
+    if (activeBranchId) await fetchInventory(activeBranchId, 1, "");
+  };
 
   const loadProductOptions = useCallback(async () => {
     const { data, error } = await supabase
@@ -541,7 +604,7 @@ export default function Inventory() {
       if (inventoryError) throw inventoryError;
 
       await Promise.all([
-        fetchInventory(activeBranchId, 1),
+        fetchInventory(activeBranchId, 1, inventorySearch),
         loadLowStockItems(activeBranchId),
       ]);
       setNewItem(DEFAULT_NEW_ITEM_FORM);
@@ -626,7 +689,7 @@ export default function Inventory() {
     setLoading(false);
     alert("Variant added successfully.");
     await Promise.all([
-      fetchInventory(activeBranchId, 1),
+      fetchInventory(activeBranchId, 1, inventorySearch),
       loadLowStockItems(activeBranchId),
     ]);
   };
@@ -749,7 +812,7 @@ export default function Inventory() {
     setLoading(false);
 
     await Promise.all([
-      fetchInventory(activeBranchId, inventoryPage),
+      fetchInventory(activeBranchId, inventoryPage, inventorySearch),
       loadLowStockItems(activeBranchId),
       loadRecentDeliveries(activeBranchId),
       loadInventoryHistory(activeBranchId),
@@ -878,7 +941,7 @@ export default function Inventory() {
     setLoading(false);
 
     await Promise.all([
-      fetchInventory(activeBranchId, inventoryPage),
+      fetchInventory(activeBranchId, inventoryPage, inventorySearch),
       loadLowStockItems(activeBranchId),
       loadInventoryHistory(activeBranchId),
       loadRecentLosses(activeBranchId),
@@ -910,7 +973,7 @@ export default function Inventory() {
     if (!activeBranchId) return;
     const nextPage = Math.min(Math.max(page, 1), totalInventoryPages);
     if (nextPage === inventoryPage) return;
-    await fetchInventory(activeBranchId, nextPage);
+    await fetchInventory(activeBranchId, nextPage, inventorySearch);
   };
 
   const handleLowStockAlertClick = (item: InventoryItem) => {
@@ -1037,21 +1100,63 @@ export default function Inventory() {
                   : "Showing the paginated inventory list for this branch."}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowLowStockOnly((current) => !current);
-                setHighlightedItemId(null);
-              }}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                showLowStockOnly
-                  ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              {showLowStockOnly ? "Show All Inventory" : "Show Low Stocks"}
-            </button>
+            <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center">
+              <form
+                onSubmit={handleInventorySearch}
+                className="flex w-full gap-2 md:w-auto"
+              >
+                <input
+                  type="search"
+                  value={inventorySearchInput}
+                  onChange={(event) =>
+                    setInventorySearchInput(event.target.value)
+                  }
+                  placeholder="Search product name or barcode..."
+                  aria-label="Search inventory by product name or barcode"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 md:w-72"
+                />
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Search
+                </button>
+                {inventorySearch && (
+                  <button
+                    type="button"
+                    onClick={() => void clearInventorySearch()}
+                    className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                  >
+                    Clear
+                  </button>
+                )}
+              </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLowStockOnly((current) => !current);
+                  setHighlightedItemId(null);
+                }}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  showLowStockOnly
+                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {showLowStockOnly ? "Show All Inventory" : "Show Low Stocks"}
+              </button>
+            </div>
           </div>
+          {!showLowStockOnly && inventorySearch && (
+            <p className="border-b border-slate-100 px-6 py-3 text-sm text-slate-500">
+              Search results for{" "}
+              <span className="font-semibold text-slate-700">
+                {inventorySearch}
+              </span>{" "}
+              ({inventoryTotalCount}{" "}
+              {inventoryTotalCount === 1 ? "item" : "items"})
+            </p>
+          )}
           <InventoryTable
             items={displayedInventoryItems}
             highlightedItemId={highlightedItemId}
