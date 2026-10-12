@@ -116,16 +116,8 @@ export default function Inventory() {
       if (normalizedSearch) {
         const pattern = `%${normalizedSearch}%`;
         const [nameResult, barcodeResult] = await Promise.all([
-          supabase
-            .from("products")
-            .select("id")
-            .ilike("name", pattern)
-            .limit(10),
-          supabase
-            .from("products")
-            .select("id")
-            .ilike("barcode", pattern)
-            .limit(10),
+          supabase.from("products").select("id").ilike("name", pattern),
+          supabase.from("products").select("id").ilike("barcode", pattern),
         ]);
 
         if (nameResult.error || barcodeResult.error) {
@@ -218,7 +210,6 @@ export default function Inventory() {
       .from("products")
       .select("id, name, barcode, product_type")
       .eq("product_type", "product")
-      .limit(10)
       .order("name", { ascending: true });
 
     if (error) {
@@ -248,7 +239,6 @@ export default function Inventory() {
         `,
       )
       .eq("branch_id", branchId)
-      .limit(10)
       .order("stock", { ascending: true });
 
     if (error) {

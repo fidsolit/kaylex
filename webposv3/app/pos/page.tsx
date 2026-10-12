@@ -250,7 +250,9 @@ export default function POSDashboard() {
   // Product browser view preference — persisted across sessions
   const [catalogView, setCatalogView] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
-    return (localStorage.getItem("pos_catalog_view") as "grid" | "list") ?? "grid";
+    return (
+      (localStorage.getItem("pos_catalog_view") as "grid" | "list") ?? "grid"
+    );
   });
   const toggleCatalogView = () => {
     setCatalogView((v) => {
@@ -286,20 +288,23 @@ export default function POSDashboard() {
   }, []);
 
   // --- Shift helpers ---
-  const loadActiveShift = useCallback(async (userId: string, branchId: string) => {
-    const { data, error } = await supabase
-      .from("shifts")
-      .select("id")
-      .eq("cashier_id", userId)
-      .eq("branch_id", branchId)
-      .eq("status", "open")
-      .maybeSingle();
-    if (error && error.code !== "PGRST116") {
-      console.error("Failed to load active shift:", error.message);
-      return null;
-    }
-    return data?.id ?? null;
-  }, []);
+  const loadActiveShift = useCallback(
+    async (userId: string, branchId: string) => {
+      const { data, error } = await supabase
+        .from("shifts")
+        .select("id")
+        .eq("cashier_id", userId)
+        .eq("branch_id", branchId)
+        .eq("status", "open")
+        .maybeSingle();
+      if (error && error.code !== "PGRST116") {
+        console.error("Failed to load active shift:", error.message);
+        return null;
+      }
+      return data?.id ?? null;
+    },
+    [],
+  );
 
   const handleOpenShift = useCallback(async () => {
     if (!activeBranchId || !currentUserId) return;
@@ -311,19 +316,23 @@ export default function POSDashboard() {
     setOpeningShift(true);
     const { data, error } = await supabase
       .from("shifts")
-      .insert([{
-        branch_id: activeBranchId,
-        cashier_id: currentUserId,
-        opening_float: float,
-        status: "open",
-      }])
+      .insert([
+        {
+          branch_id: activeBranchId,
+          cashier_id: currentUserId,
+          opening_float: float,
+          status: "open",
+        },
+      ])
       .select("id")
       .single();
     if (error) {
       if (error.code === "23505") {
         alert("You already have an open shift. Refresh the page.");
       } else if (error.code === "42P01") {
-        alert("Shifts table missing. Run shift_management.sql in Supabase SQL Editor first.");
+        alert(
+          "Shifts table missing. Run shift_management.sql in Supabase SQL Editor first.",
+        );
       } else {
         alert(error.message);
       }
@@ -349,8 +358,12 @@ export default function POSDashboard() {
       const { data: payRows } = await supabase
         .from("payments")
         .select("amount, method")
+
         .in("sale_id", saleIds);
-      cashTotal = ((payRows ?? []) as { amount: number; method: string | null }[])
+
+      cashTotal = (
+        (payRows ?? []) as { amount: number; method: string | null }[]
+      )
         .filter((p) => p.method?.toLowerCase() === "cash")
         .reduce((sum, p) => sum + Number(p.amount), 0);
     }
@@ -398,9 +411,14 @@ export default function POSDashboard() {
     await supabase.auth.signOut();
     router.push("/auth/login");
   }, [
-    activeShiftId, activeBranchId, currentUserId,
-    endShiftDeclaredCash, endShiftNotes,
-    shiftOpeningFloat, shiftCashSalesTotal, router,
+    activeShiftId,
+    activeBranchId,
+    currentUserId,
+    endShiftDeclaredCash,
+    endShiftNotes,
+    shiftOpeningFloat,
+    shiftCashSalesTotal,
+    router,
   ]);
 
   const refreshDashboardData = useCallback(async () => {
@@ -446,8 +464,9 @@ export default function POSDashboard() {
           count: "exact",
         })
         .order("created_at", { ascending: false })
+        .limit(1)
         .range(from, to);
-
+      // this is fede
       if (salesSummaryError) {
         console.error(
           "Failed to fetch dashboard sales summary:",
@@ -648,7 +667,10 @@ export default function POSDashboard() {
       if (branch) {
         setActiveBranchId(branch.id);
         // Load any existing open shift for this cashier
-        const existingShiftId = await loadActiveShift(session.user.id, branch.id);
+        const existingShiftId = await loadActiveShift(
+          session.user.id,
+          branch.id,
+        );
         setActiveShiftId(existingShiftId);
         // If no shift exists, prompt to open one
         if (!existingShiftId) {
@@ -696,14 +718,19 @@ export default function POSDashboard() {
         )
       `,
       )
+      // .eq("branch_id", activeBranchId)
       .eq("branch_id", activeBranchId)
+
       .gt("stock", 0)
+
       .order("updated_at", { ascending: false });
 
     const { data: serviceData, error: serviceError } = await supabase
       .from("products")
       .select("id, name, price, cost, barcode, product_type")
-      .eq("product_type", "service")
+      // .eq("product_type", "service") sakpan ka
+      .eq("product_type", "product")
+
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -1126,7 +1153,6 @@ export default function POSDashboard() {
     ensureCustomerRecord,
   ]);
 
-
   const filteredCatalogItems = catalogItems.filter((item) => {
     const q = itemSearch.trim().toLowerCase();
     if (!q) return true;
@@ -1184,37 +1210,38 @@ export default function POSDashboard() {
     await refreshDashboardData();
   };
 
-  const handleVoidSale = useCallback(async (saleId: string) => {
-    if (!activeBranchId || !currentUserId) {
-      alert("Missing branch or user context.");
-      return;
-    }
+  const handleVoidSale = useCallback(
+    async (saleId: string) => {
+      if (!activeBranchId || !currentUserId) {
+        alert("Missing branch or user context.");
+        return;
+      }
 
-    const confirmed = window.confirm(
-      "Void this transaction and return the sold items back to inventory?",
-    );
-    if (!confirmed) return;
+      const confirmed = window.confirm(
+        "Void this transaction and return the sold items back to inventory?",
+      );
+      if (!confirmed) return;
 
-    const { data: saleRow, error: saleError } = await supabase
-      .from("sales")
-      .select("id, status")
-      .eq("id", saleId)
-      .single();
+      const { data: saleRow, error: saleError } = await supabase
+        .from("sales")
+        .select("id, status")
+        .eq("id", saleId)
+        .single();
 
-    if (saleError) {
-      alert(saleError.message);
-      return;
-    }
+      if (saleError) {
+        alert(saleError.message);
+        return;
+      }
 
-    if (saleRow?.status === "void") {
-      alert("This sale is already voided.");
-      return;
-    }
+      if (saleRow?.status === "void") {
+        alert("This sale is already voided.");
+        return;
+      }
 
-    const { data: saleItemsData, error: saleItemsError } = await supabase
-      .from("sale_items")
-      .select(
-        `
+      const { data: saleItemsData, error: saleItemsError } = await supabase
+        .from("sale_items")
+        .select(
+          `
         id,
         product_id,
         quantity,
@@ -1223,112 +1250,114 @@ export default function POSDashboard() {
           product_type
         )
       `,
-      )
-      .eq("sale_id", saleId);
+        )
+        .eq("sale_id", saleId);
 
-    if (saleItemsError) {
-      alert(saleItemsError.message);
-      return;
-    }
-
-    const saleItems = (saleItemsData as SaleItemForVoid[]) ?? [];
-    const stockedSaleItems = saleItems.filter((item) => {
-      const product = Array.isArray(item.products)
-        ? (item.products[0] ?? null)
-        : item.products;
-      return product?.product_type !== "service";
-    });
-    const productIds = Array.from(
-      new Set(
-        stockedSaleItems
-          .map((item) => item.product_id)
-          .filter((productId): productId is string => Boolean(productId)),
-      ),
-    );
-
-    if (productIds.length > 0) {
-      const { data: inventoryRows, error: inventoryError } = await supabase
-        .from("inventory")
-        .select("id, product_id, stock")
-        .eq("branch_id", activeBranchId)
-        .in("product_id", productIds);
-
-      if (inventoryError) {
-        alert(inventoryError.message);
+      if (saleItemsError) {
+        alert(saleItemsError.message);
         return;
       }
 
-      const inventoryMap = new Map(
-        ((inventoryRows ?? []) as InventoryForSale[]).map((row) => [
-          row.product_id,
-          row,
-        ]),
+      const saleItems = (saleItemsData as SaleItemForVoid[]) ?? [];
+      const stockedSaleItems = saleItems.filter((item) => {
+        const product = Array.isArray(item.products)
+          ? (item.products[0] ?? null)
+          : item.products;
+        return product?.product_type !== "service";
+      });
+      const productIds = Array.from(
+        new Set(
+          stockedSaleItems
+            .map((item) => item.product_id)
+            .filter((productId): productId is string => Boolean(productId)),
+        ),
       );
 
-      for (const item of stockedSaleItems) {
-        const inventoryRecord = inventoryMap.get(item.product_id);
-        if (!inventoryRecord) {
-          alert(
-            "Unable to restore inventory because a stock record is missing.",
-          );
-          return;
-        }
-
-        const restoredStock =
-          Number(inventoryRecord.stock ?? 0) + Number(item.quantity ?? 0);
-
-        const { error: updateInventoryError } = await supabase
+      if (productIds.length > 0) {
+        const { data: inventoryRows, error: inventoryError } = await supabase
           .from("inventory")
-          .update({
-            stock: restoredStock,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", inventoryRecord.id);
+          .select("id, product_id, stock")
+          .eq("branch_id", activeBranchId)
+          .in("product_id", productIds);
 
-        if (updateInventoryError) {
-          alert(updateInventoryError.message);
+        if (inventoryError) {
+          alert(inventoryError.message);
           return;
         }
 
-        const { error: movementError } = await supabase
-          .from("stock_movements")
-          .insert([
-            {
-              branch_id: activeBranchId,
-              product_id: item.product_id,
-              movement_type: "void_restore",
-              quantity: Number(item.quantity ?? 0),
-              unit_cost: Number(item.unit_cost ?? 0),
-              reference_type: "sale",
-              reference_id: saleId,
-              note: "Inventory restored from voided sale.",
-              created_by: currentUserId,
-            },
-          ]);
+        const inventoryMap = new Map(
+          ((inventoryRows ?? []) as InventoryForSale[]).map((row) => [
+            row.product_id,
+            row,
+          ]),
+        );
 
-        if (movementError) {
-          alert(movementError.message);
-          return;
+        for (const item of stockedSaleItems) {
+          const inventoryRecord = inventoryMap.get(item.product_id);
+          if (!inventoryRecord) {
+            alert(
+              "Unable to restore inventory because a stock record is missing.",
+            );
+            return;
+          }
+
+          const restoredStock =
+            Number(inventoryRecord.stock ?? 0) + Number(item.quantity ?? 0);
+
+          const { error: updateInventoryError } = await supabase
+            .from("inventory")
+            .update({
+              stock: restoredStock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", inventoryRecord.id);
+
+          if (updateInventoryError) {
+            alert(updateInventoryError.message);
+            return;
+          }
+
+          const { error: movementError } = await supabase
+            .from("stock_movements")
+            .insert([
+              {
+                branch_id: activeBranchId,
+                product_id: item.product_id,
+                movement_type: "void_restore",
+                quantity: Number(item.quantity ?? 0),
+                unit_cost: Number(item.unit_cost ?? 0),
+                reference_type: "sale",
+                reference_id: saleId,
+                note: "Inventory restored from voided sale.",
+                created_by: currentUserId,
+              },
+            ]);
+
+          if (movementError) {
+            alert(movementError.message);
+            return;
+          }
         }
       }
-    }
 
-    const { error } = await supabase
-      .from("sales")
-      .update({
-        status: "void",
-        voided_at: new Date().toISOString(),
-        voided_by: currentUserId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", saleId);
+      const { error } = await supabase
+        .from("sales")
+        .update({
+          status: "void",
+          voided_at: new Date().toISOString(),
+          voided_by: currentUserId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", saleId);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    await refreshDashboardData();
-  }, [activeBranchId, currentUserId, refreshDashboardData]);
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      await refreshDashboardData();
+    },
+    [activeBranchId, currentUserId, refreshDashboardData],
+  );
 
   const viewSaleDetails = async (sale: Sale) => {
     setDetailsLoading(true);
@@ -1515,7 +1544,20 @@ export default function POSDashboard() {
       const tag = (e.target as HTMLElement).tagName;
       const isTyping =
         (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") &&
-        !["F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","Escape"].includes(e.key);
+        ![
+          "F1",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "F9",
+          "F10",
+          "F11",
+          "Escape",
+        ].includes(e.key);
       if (isTyping) return;
 
       switch (e.key) {
@@ -1705,9 +1747,9 @@ export default function POSDashboard() {
       alert("Unable to open print preview.");
       return;
     }
-//this is the code that generates the HTML for the print preview of the sale details. It creates a new window and writes the HTML content into it, including styles and the sale information. The receipt includes the transaction details, items sold, payments made, and totals. After writing the content, it closes the document, focuses on the new window, and triggers the print dialog.
-// 1. Write the initial document structure with a unique ID container
-printWindow.document.write(`
+    //this is the code that generates the HTML for the print preview of the sale details. It creates a new window and writes the HTML content into it, including styles and the sale information. The receipt includes the transaction details, items sold, payments made, and totals. After writing the content, it closes the document, focuses on the new window, and triggers the print dialog.
+    // 1. Write the initial document structure with a unique ID container
+    printWindow.document.write(`
   <html>
     <head>
       <title>Transaction ${sale.receipt_no || sale.id}</title>
@@ -1756,13 +1798,13 @@ printWindow.document.write(`
         <div class="divider"></div>
         <div class="summary-row"><span>Receipt</span><span>${sale.receipt_no || "-"}</span></div>
         <div class="summary-row"><span>Sale ID</span><span>${sale.id.slice(0, 8)}</span></div>
-        <div class="summary-row"><span>Date</span><span>${new Date(sale.created_at).toLocaleString([], {hour: '2-digit', minute:'2-digit', year: 'numeric', month: 'numeric', day: 'numeric'})}</span></div>
+        <div class="summary-row"><span>Date</span><span>${new Date(sale.created_at).toLocaleString([], { hour: "2-digit", minute: "2-digit", year: "numeric", month: "numeric", day: "numeric" })}</span></div>
         <div class="summary-row"><span>Cashier</span><span>${cashierName}</span></div>
         <div class="summary-row"><span>Status</span><span>${sale.status.toUpperCase()}</span></div>
         ${
           sale.status === "void"
             ? `
-        <div class="summary-row"><span>Voided At</span><span>${sale.voided_at ? new Date(sale.voided_at).toLocaleString([], {hour: '2-digit', minute:'2-digit'}) : "-"}</span></div>
+        <div class="summary-row"><span>Voided At</span><span>${sale.voided_at ? new Date(sale.voided_at).toLocaleString([], { hour: "2-digit", minute: "2-digit" }) : "-"}</span></div>
         <div class="summary-row"><span>Voided By</span><span>${voidedByName}</span></div>
         `
             : ""
@@ -1796,28 +1838,27 @@ printWindow.document.write(`
   </html>
 `);
 
-printWindow.document.close();
-printWindow.focus();
+    printWindow.document.close();
+    printWindow.focus();
 
-// 2. Measure content pixel height and calculate required sheet size
-const container = printWindow.document.getElementById('receipt-container');
-const styleTag = printWindow.document.getElementById('dynamic-page-size');
+    // 2. Measure content pixel height and calculate required sheet size
+    const container = printWindow.document.getElementById("receipt-container");
+    const styleTag = printWindow.document.getElementById("dynamic-page-size");
 
-if (container && styleTag) {
-  // Capture precise height including padding boundaries
-  const pixelHeight = container.offsetHeight; 
-  
-  // Standard display printing translates 96 pixels to 1 inch (25.4 millimeters)
-  // Adding an explicit 4mm safety margin prevents early cutoffs or rounding hiccups
-  const mmHeight = Math.ceil((pixelHeight * 25.4) / 96) + 4; 
-  
-  // 3. Re-inject the explicit dynamic dimensions right before triggering print
-  styleTag.innerHTML = `@page { size: 58mm \${mmHeight}mm; margin: 0mm; }`;
-}
+    if (container && styleTag) {
+      // Capture precise height including padding boundaries
+      const pixelHeight = container.offsetHeight;
 
-// 4. Fire print pipeline
-printWindow.print();
+      // Standard display printing translates 96 pixels to 1 inch (25.4 millimeters)
+      // Adding an explicit 4mm safety margin prevents early cutoffs or rounding hiccups
+      const mmHeight = Math.ceil((pixelHeight * 25.4) / 96) + 4;
 
+      // 3. Re-inject the explicit dynamic dimensions right before triggering print
+      styleTag.innerHTML = `@page { size: 58mm \${mmHeight}mm; margin: 0mm; }`;
+    }
+
+    // 4. Fire print pipeline
+    printWindow.print();
   };
 
   if (checkingAuth) {
@@ -1840,8 +1881,12 @@ printWindow.print();
       <main className="flex-1 overflow-y-auto p-4 pt-20 pb-20 md:pt-10 md:p-10 md:pb-20">
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold">Dashboard Overview</h2>
-            <p className="text-slate-500 mt-1 text-sm">Real-time performance metrics</p>
+            <h2 className="text-2xl sm:text-3xl font-bold">
+              Dashboard Overview
+            </h2>
+            <p className="text-slate-500 mt-1 text-sm">
+              Real-time performance metrics
+            </p>
             {/* Shift status badge */}
             {activeShiftId ? (
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
@@ -1919,9 +1964,14 @@ printWindow.print();
         </div>
 
         {/* Recent Transactions Table */}
-        <div ref={transactionsTableRef} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div
+          ref={transactionsTableRef}
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"
+        >
           <div className="p-5 sm:p-8 border-b border-slate-50">
-            <h3 className="text-base sm:text-lg font-bold">Recent Transactions</h3>
+            <h3 className="text-base sm:text-lg font-bold">
+              Recent Transactions
+            </h3>
             <p className="text-sm text-slate-500 mt-1 hidden sm:block">
               Latest sales recorded in your POS, including unit cost per
               transaction.
@@ -2078,42 +2128,42 @@ printWindow.print();
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
           {/* Promise-to-Pay alerts — credit feature only */}
           {CREDIT_ENABLED && (
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-50">
-              <h3 className="text-lg font-bold">Promise-to-Pay Due Alerts</h3>
-              <p className="text-sm text-slate-500">
-                Credits due today and within 7 days.
-              </p>
-            </div>
-            <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
-              {dueCreditAlerts.length > 0 ? (
-                dueCreditAlerts.map((credit) => (
-                  <div
-                    key={credit.id}
-                    className="border border-amber-100 bg-amber-50 rounded-xl p-3"
-                  >
-                    <p className="font-semibold text-sm">
-                      {credit.customer_name}
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      ₱{Number(credit.amount).toFixed(2)} - due{" "}
-                      {credit.promise_to_pay_date
-                        ? new Date(
-                            credit.promise_to_pay_date,
-                          ).toLocaleDateString()
-                        : "-"}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-slate-400">
-                  No upcoming due promises.
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-50">
+                <h3 className="text-lg font-bold">Promise-to-Pay Due Alerts</h3>
+                <p className="text-sm text-slate-500">
+                  Credits due today and within 7 days.
                 </p>
-              )}
+              </div>
+              <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
+                {dueCreditAlerts.length > 0 ? (
+                  dueCreditAlerts.map((credit) => (
+                    <div
+                      key={credit.id}
+                      className="border border-amber-100 bg-amber-50 rounded-xl p-3"
+                    >
+                      <p className="font-semibold text-sm">
+                        {credit.customer_name}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        ₱{Number(credit.amount).toFixed(2)} - due{" "}
+                        {credit.promise_to_pay_date
+                          ? new Date(
+                              credit.promise_to_pay_date,
+                            ).toLocaleDateString()
+                          : "-"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    No upcoming due promises.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-          )} {/* end CREDIT_ENABLED — Promise-to-Pay alerts */}
-
+          )}{" "}
+          {/* end CREDIT_ENABLED — Promise-to-Pay alerts */}
           <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-50">
               <h3 className="text-lg font-bold">Low Stock Notifications</h3>
@@ -2221,14 +2271,15 @@ printWindow.print();
       ════════════════════════════════════════════════════════════════ */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-100">
-
           {/* ── Top bar ─────────────────────────────────────────────────── */}
           <div className="flex items-center justify-between bg-slate-900 px-5 py-3 shrink-0">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
                 <ShoppingCart size={16} className="text-white" />
               </div>
-              <span className="text-white font-bold text-lg tracking-tight">New Sale</span>
+              <span className="text-white font-bold text-lg tracking-tight">
+                New Sale
+              </span>
               {cart.length > 0 && (
                 <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-bold text-white">
                   {cart.reduce((s, i) => s + i.quantity, 0)} items
@@ -2236,7 +2287,10 @@ printWindow.print();
               )}
             </div>
             <button
-              onClick={() => { setIsModalOpen(false); resetSaleForm(); }}
+              onClick={() => {
+                setIsModalOpen(false);
+                resetSaleForm();
+              }}
               className="flex items-center gap-2 rounded-xl bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition"
             >
               <X size={16} />
@@ -2246,15 +2300,16 @@ printWindow.print();
 
           {/* ── Body: two-panel layout ───────────────────────────────────── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
-
             {/* LEFT — Item browser */}
             <div className="flex flex-col w-full lg:w-[420px] xl:w-[460px] shrink-0 bg-white border-r border-slate-200">
-
               {/* Search inputs + view toggle */}
               <div className="p-4 border-b border-slate-100 space-y-2 shrink-0">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
                     <input
                       autoFocus
                       ref={itemSearchRef}
@@ -2268,7 +2323,10 @@ printWindow.print();
                   <div className="flex rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shrink-0">
                     <button
                       type="button"
-                      onClick={() => { setCatalogView("grid"); localStorage.setItem("pos_catalog_view", "grid"); }}
+                      onClick={() => {
+                        setCatalogView("grid");
+                        localStorage.setItem("pos_catalog_view", "grid");
+                      }}
                       title="Grid view"
                       className={`flex items-center justify-center w-10 h-10 transition ${
                         catalogView === "grid"
@@ -2280,7 +2338,10 @@ printWindow.print();
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setCatalogView("list"); localStorage.setItem("pos_catalog_view", "list"); }}
+                      onClick={() => {
+                        setCatalogView("list");
+                        localStorage.setItem("pos_catalog_view", "list");
+                      }}
                       title="List view"
                       className={`flex items-center justify-center w-10 h-10 transition ${
                         catalogView === "list"
@@ -2330,7 +2391,9 @@ printWindow.print();
                             {item.name}
                           </p>
                           {item.barcode && (
-                            <p className="mt-1 text-[10px] text-slate-400 font-mono">{item.barcode}</p>
+                            <p className="mt-1 text-[10px] text-slate-400 font-mono">
+                              {item.barcode}
+                            </p>
                           )}
                           <p className="mt-2 text-base font-black text-blue-600">
                             ₱{Number(item.price).toFixed(2)}
@@ -2390,22 +2453,31 @@ printWindow.print();
 
             {/* RIGHT — Cart + payment */}
             <div className="flex flex-col flex-1 min-w-0">
-
               {/* Cart table */}
               <div className="flex-1 overflow-y-auto">
                 {cart.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
                     <ShoppingCart size={48} strokeWidth={1} />
-                    <p className="text-sm font-medium">Cart is empty — add items from the left</p>
+                    <p className="text-sm font-medium">
+                      Cart is empty — add items from the left
+                    </p>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-200/80 backdrop-blur-sm">
                       <tr>
-                        <th className="px-5 py-3 text-left font-semibold text-slate-600 w-full">Item</th>
-                        <th className="px-4 py-3 text-center font-semibold text-slate-600 whitespace-nowrap">Qty</th>
-                        <th className="px-4 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">Unit Price</th>
-                        <th className="px-5 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">Subtotal</th>
+                        <th className="px-5 py-3 text-left font-semibold text-slate-600 w-full">
+                          Item
+                        </th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-600 whitespace-nowrap">
+                          Qty
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">
+                          Unit Price
+                        </th>
+                        <th className="px-5 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">
+                          Subtotal
+                        </th>
                         <th className="px-3 py-3" />
                       </tr>
                     </thead>
@@ -2417,7 +2489,9 @@ printWindow.print();
                         >
                           {/* Item name + badge */}
                           <td className="px-5 py-4">
-                            <p className="font-semibold text-slate-800">{item.name}</p>
+                            <p className="font-semibold text-slate-800">
+                              {item.name}
+                            </p>
                             <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 mt-0.5">
                               {item.product_type}
                             </span>
@@ -2427,7 +2501,12 @@ printWindow.print();
                           <td className="px-4 py-4">
                             <div className="flex items-center justify-center gap-1">
                               <button
-                                onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                                onClick={() =>
+                                  handleQuantityChange(
+                                    item.id,
+                                    item.quantity - 1,
+                                  )
+                                }
                                 className="h-8 w-8 rounded-lg bg-slate-200 hover:bg-rose-100 hover:text-rose-600 font-bold text-lg leading-none transition flex items-center justify-center"
                               >
                                 −
@@ -2436,7 +2515,12 @@ printWindow.print();
                                 {item.quantity}
                               </span>
                               <button
-                                onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                                onClick={() =>
+                                  handleQuantityChange(
+                                    item.id,
+                                    item.quantity + 1,
+                                  )
+                                }
                                 className="h-8 w-8 rounded-lg bg-slate-200 hover:bg-emerald-100 hover:text-emerald-700 font-bold text-lg leading-none transition flex items-center justify-center"
                               >
                                 +
@@ -2472,7 +2556,6 @@ printWindow.print();
 
               {/* Payment panel — pinned to bottom */}
               <div className="shrink-0 border-t-2 border-slate-200 bg-white">
-
                 {/* Payment method tabs */}
                 <div className="flex border-b border-slate-100">
                   <button
@@ -2524,8 +2607,12 @@ printWindow.print();
                           value={cashAmount}
                           autoFocus={paymentMethod === "cash"}
                           onKeyDown={(e) => {
-                            if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-                            if (e.key === "Enter" && Number(cashAmount) >= cartSubtotal) {
+                            if (["e", "E", "+", "-"].includes(e.key))
+                              e.preventDefault();
+                            if (
+                              e.key === "Enter" &&
+                              Number(cashAmount) >= cartSubtotal
+                            ) {
                               void handleAddNewSale();
                             }
                           }}
@@ -2537,7 +2624,8 @@ printWindow.print();
                             }
                           }}
                           className={`flex-1 rounded-xl border-2 bg-slate-50 p-3 text-2xl font-black text-right tabular-nums outline-none transition ${
-                            cashAmount !== "" && Number(cashAmount) < cartSubtotal
+                            cashAmount !== "" &&
+                            Number(cashAmount) < cartSubtotal
                               ? "border-rose-400 focus:border-rose-500 text-rose-600"
                               : "border-slate-200 focus:border-blue-500"
                           }`}
@@ -2545,21 +2633,41 @@ printWindow.print();
                       </div>
 
                       {/* Change */}
-                      <div className={`flex items-center justify-between rounded-2xl px-4 py-3 ${
-                        change >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100"
-                      }`}>
-                        <span className="font-semibold text-sm text-slate-600">Change</span>
-                        <span className={`text-3xl font-black tabular-nums ${
-                          change >= 0 ? "text-emerald-600" : "text-rose-600"
-                        }`}>
+                      <div
+                        className={`flex items-center justify-between rounded-2xl px-4 py-3 ${
+                          change >= 0
+                            ? "bg-emerald-50 border border-emerald-100"
+                            : "bg-rose-50 border border-rose-100"
+                        }`}
+                      >
+                        <span className="font-semibold text-sm text-slate-600">
+                          Change
+                        </span>
+                        <span
+                          className={`text-3xl font-black tabular-nums ${
+                            change >= 0 ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
                           ₱{change.toFixed(2)}
                         </span>
                       </div>
 
                       {/* Quick cash buttons */}
                       <div className="grid grid-cols-4 gap-2">
-                        {[20, 50, 100, 200, 500, 1000, Math.ceil(cartSubtotal / 100) * 100, cartSubtotal]
-                          .filter((v, i, a) => v >= cartSubtotal && a.indexOf(v) === i)
+                        {[
+                          20,
+                          50,
+                          100,
+                          200,
+                          500,
+                          1000,
+                          Math.ceil(cartSubtotal / 100) * 100,
+                          cartSubtotal,
+                        ]
+                          .filter(
+                            (v, i, a) =>
+                              v >= cartSubtotal && a.indexOf(v) === i,
+                          )
                           .slice(0, 4)
                           .map((amount) => (
                             <button
@@ -2588,13 +2696,17 @@ printWindow.print();
                         <input
                           placeholder="Contact (optional)"
                           value={saleCustomerContact}
-                          onChange={(e) => setSaleCustomerContact(e.target.value)}
+                          onChange={(e) =>
+                            setSaleCustomerContact(e.target.value)
+                          }
                           className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                         />
                         <input
                           type="date"
                           value={salePromiseToPayDate}
-                          onChange={(e) => setSalePromiseToPayDate(e.target.value)}
+                          onChange={(e) =>
+                            setSalePromiseToPayDate(e.target.value)
+                          }
                           className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                         />
                       </div>
@@ -2613,8 +2725,11 @@ printWindow.print();
                     disabled={
                       submittingSale ||
                       cart.length === 0 ||
-                      (paymentMethod === "cash" && Number(cashAmount) < cartSubtotal) ||
-                      (CREDIT_ENABLED && paymentMethod === "credit" && !saleCustomerName.trim())
+                      (paymentMethod === "cash" &&
+                        Number(cashAmount) < cartSubtotal) ||
+                      (CREDIT_ENABLED &&
+                        paymentMethod === "credit" &&
+                        !saleCustomerName.trim())
                     }
                     onClick={handleAddNewSale}
                     className={`w-full py-4 rounded-2xl font-black text-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg ${
@@ -2628,7 +2743,9 @@ printWindow.print();
                     ) : (
                       <>
                         <CheckCircle2 size={22} />
-                        {paymentMethod === "credit" ? "Complete Credit Sale" : `Charge ₱${cartSubtotal.toFixed(2)}`}
+                        {paymentMethod === "credit"
+                          ? "Complete Credit Sale"
+                          : `Charge ₱${cartSubtotal.toFixed(2)}`}
                       </>
                     )}
                   </button>
@@ -3028,7 +3145,8 @@ printWindow.print();
                   onChange={(e) => setShiftOpeningFloat(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleOpenShift();
-                    if (["e","E","+","-"].includes(e.key)) e.preventDefault();
+                    if (["e", "E", "+", "-"].includes(e.key))
+                      e.preventDefault();
                   }}
                   autoFocus
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"
@@ -3039,7 +3157,9 @@ printWindow.print();
                 disabled={openingShift}
                 className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold text-base hover:bg-emerald-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                {openingShift ? <Loader2 size={18} className="animate-spin" /> : null}
+                {openingShift ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : null}
                 Start Shift
               </button>
             </div>
@@ -3053,7 +3173,8 @@ printWindow.print();
           <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[95vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-1">End Shift</h2>
             <p className="text-sm text-slate-500 mb-5">
-              Count your cash drawer and enter the total below. The system will calculate the variance.
+              Count your cash drawer and enter the total below. The system will
+              calculate the variance.
             </p>
 
             {/* Shift summary */}
@@ -3065,7 +3186,9 @@ printWindow.print();
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Cash Sales ({shiftTxCount} tx)</span>
+                <span className="text-slate-500">
+                  Cash Sales ({shiftTxCount} tx)
+                </span>
                 <span className="font-semibold text-emerald-600">
                   + ₱{shiftCashSalesTotal.toFixed(2)}
                 </span>
@@ -3073,7 +3196,11 @@ printWindow.print();
               <div className="flex justify-between border-t border-slate-200 pt-2 font-bold">
                 <span>Expected in Drawer</span>
                 <span>
-                  ₱{((Number.parseFloat(shiftOpeningFloat) || 0) + shiftCashSalesTotal).toFixed(2)}
+                  ₱
+                  {(
+                    (Number.parseFloat(shiftOpeningFloat) || 0) +
+                    shiftCashSalesTotal
+                  ).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -3091,7 +3218,8 @@ printWindow.print();
                   value={endShiftDeclaredCash}
                   onChange={(e) => setEndShiftDeclaredCash(e.target.value)}
                   onKeyDown={(e) => {
-                    if (["e","E","+","-"].includes(e.key)) e.preventDefault();
+                    if (["e", "E", "+", "-"].includes(e.key))
+                      e.preventDefault();
                   }}
                   autoFocus
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-2xl font-bold outline-none focus:ring-2 focus:ring-rose-400"
@@ -3099,25 +3227,30 @@ printWindow.print();
               </div>
 
               {/* Live variance preview */}
-              {endShiftDeclaredCash !== "" && (
+              {endShiftDeclaredCash !== "" &&
                 (() => {
-                  const expected = (Number.parseFloat(shiftOpeningFloat) || 0) + shiftCashSalesTotal;
+                  const expected =
+                    (Number.parseFloat(shiftOpeningFloat) || 0) +
+                    shiftCashSalesTotal;
                   const declared = Number.parseFloat(endShiftDeclaredCash) || 0;
                   const variance = declared - expected;
                   return (
-                    <div className={`rounded-2xl p-4 text-sm font-semibold flex justify-between ${
-                      variance < 0
-                        ? "bg-rose-50 text-rose-700 border border-rose-100"
-                        : variance > 0
-                        ? "bg-amber-50 text-amber-700 border border-amber-100"
-                        : "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                    }`}>
+                    <div
+                      className={`rounded-2xl p-4 text-sm font-semibold flex justify-between ${
+                        variance < 0
+                          ? "bg-rose-50 text-rose-700 border border-rose-100"
+                          : variance > 0
+                            ? "bg-amber-50 text-amber-700 border border-amber-100"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      }`}
+                    >
                       <span>Variance</span>
-                      <span>{variance >= 0 ? "+" : ""}₱{variance.toFixed(2)}</span>
+                      <span>
+                        {variance >= 0 ? "+" : ""}₱{variance.toFixed(2)}
+                      </span>
                     </div>
                   );
-                })()
-              )}
+                })()}
 
               <div>
                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">
@@ -3147,7 +3280,9 @@ printWindow.print();
                   disabled={closingShift || endShiftDeclaredCash === ""}
                   className="flex-1 py-3 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
                 >
-                  {closingShift ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {closingShift ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : null}
                   Close Shift & Remit
                 </button>
               </div>
@@ -3160,15 +3295,15 @@ printWindow.print();
       <div className="fixed bottom-0 left-0 right-0 z-40 hidden sm:flex items-stretch border-t border-slate-200 bg-white text-[10px] font-semibold shadow-lg select-none print:hidden overflow-x-auto">
         {[
           { key: "Enter", label: "Execute" },
-          { key: "F1",  label: "New Sale" },
-          { key: "F2",  label: "Search Items" },
-          { key: "F3",  label: "Scan Barcode" },
-          { key: "F4",  label: "Credit Pay" },
-          { key: "F5",  label: "Transactions" },
-          { key: "F6",  label: "Cash Pay" },
-          { key: "F7",  label: "Pay (No Print)" },
-          { key: "F8",  label: "Process Sale" },
-          { key: "F9",  label: "View Orders" },
+          { key: "F1", label: "New Sale" },
+          { key: "F2", label: "Search Items" },
+          { key: "F3", label: "Scan Barcode" },
+          { key: "F4", label: "Credit Pay" },
+          { key: "F5", label: "Transactions" },
+          { key: "F6", label: "Cash Pay" },
+          { key: "F7", label: "Pay (No Print)" },
+          { key: "F8", label: "Process Sale" },
+          { key: "F9", label: "View Orders" },
           { key: "F10", label: "Void Trans" },
           { key: "F11", label: "Log Off" },
         ].map(({ key, label }) => (
@@ -3179,7 +3314,9 @@ printWindow.print();
             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 leading-tight">
               {key}
             </span>
-            <span className="text-slate-700 leading-tight text-center">{label}</span>
+            <span className="text-slate-700 leading-tight text-center">
+              {label}
+            </span>
           </div>
         ))}
       </div>
