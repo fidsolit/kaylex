@@ -206,18 +206,27 @@ export default function Inventory() {
   };
 
   const loadProductOptions = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select("id, name, barcode, product_type")
-      .eq("product_type", "product")
-      .order("name", { ascending: true });
+    const pageSize = 1000;
+    const allProducts: ProductOption[] = [];
 
-    if (error) {
-      console.error("Failed loading products:", error.message);
-      return;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, barcode, product_type")
+        .order("name", { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        console.error("Failed loading products:", error.message);
+        return;
+      }
+
+      const page = (data as ProductOption[]) ?? [];
+      allProducts.push(...page);
+      if (page.length < pageSize) break;
     }
 
-    setProductOptions((data as ProductOption[]) ?? []);
+    setProductOptions(allProducts);
   }, []);
 
   const loadLowStockItems = useCallback(async (branchId: string) => {
@@ -963,6 +972,7 @@ export default function Inventory() {
     return productOptions.filter((product) => {
       const nameMatch = product.name.toLowerCase().includes(query);
       const barcodeMatch = (product.barcode ?? "")
+        .trim()
         .toLowerCase()
         .includes(query);
       return nameMatch || barcodeMatch;
@@ -994,7 +1004,7 @@ export default function Inventory() {
     const matchedProduct = productOptions.find((product) => {
       return (
         product.name.toLowerCase().includes(query) ||
-        (product.barcode ?? "").toLowerCase() === query
+        (product.barcode ?? "").trim().toLowerCase() === query
       );
     });
     if (!matchedProduct) {
@@ -1015,7 +1025,8 @@ export default function Inventory() {
     if (!normalizedBarcode) return;
 
     const matchedProduct = productOptions.find(
-      (product) => (product.barcode ?? "").toLowerCase() === normalizedBarcode,
+      (product) =>
+        (product.barcode ?? "").trim().toLowerCase() === normalizedBarcode,
     );
 
     if (!matchedProduct) return;
