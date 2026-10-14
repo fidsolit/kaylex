@@ -58,7 +58,8 @@ interface ProductCatalogItem {
   price: number;
   cost: number;
   barcode: string | null;
-  product_type: "product" | "service";
+  // product_type: "product" | "service";
+  product_type: "product";
 }
 
 interface CartItem extends ProductCatalogItem {
@@ -205,6 +206,8 @@ export default function POSDashboard() {
   const [submittingSale, setSubmittingSale] = useState(false);
   const [catalogItems, setCatalogItems] = useState<ProductCatalogItem[]>([]);
   const [itemSearch, setItemSearch] = useState("");
+  const [catalogPage, setCatalogPage] = useState(1);
+  const catalogPageSize = 12;
   const [barcodeInput, setBarcodeInput] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
@@ -277,6 +280,7 @@ export default function POSDashboard() {
   const resetSaleForm = useCallback(() => {
     setCart([]);
     setItemSearch("");
+    setCatalogPage(1);
     setBarcodeInput("");
     setPaymentMethod("cash");
     setCashAmount("");
@@ -703,79 +707,90 @@ export default function POSDashboard() {
   // --- 3. Actions ---
   const loadCatalogItems = useCallback(async () => {
     if (!activeBranchId) return;
-    const { data, error } = await supabase
-      .from("inventory")
-      .select(
-        `
-        stock,
-        products (
-          id,
-          name,
-          price,
-          cost,
-          barcode,
-          product_type
-        )
-      `,
-      )
-      // .eq("branch_id", activeBranchId)
-      .eq("branch_id", activeBranchId)
 
-      .gt("stock", 0)
-
-      .order("updated_at", { ascending: false });
-
-    const { data: serviceData, error: serviceError } = await supabase
-      .from("products")
-      .select("id, name, price, cost, barcode, product_type")
-      // .eq("product_type", "service") sakpan ka
-      .eq("product_type", "product")
-
-      .order("updated_at", { ascending: false });
-
-    if (error) {
-      console.error("Failed loading catalog:", error.message);
-      return;
-    }
-
-    if (serviceError) {
-      console.error("Failed loading services:", serviceError.message);
-      return;
-    }
-
-    const rows = (data ?? []) as {
+    // Supabase applies a maximum-rows limit to individual queries. Fetch the
+    // catalog in batches so products beyond that limit are not silently lost.
+    const batchSize = 500;
+    let inventoryRows: {
       stock: number;
-      products:
-        | {
-            id: string;
-            name: string;
-            price: number;
-            cost: number;
-            barcode: string | null;
-          }
-        | {
-            id: string;
-            name: string;
-            price: number;
-            cost: number;
-            barcode: string | null;
-          }[]
-        | null;
-    }[];
+      products: ProductCatalogItem | ProductCatalogItem[] | null;
+    }[] = [];
+    let inventoryFrom = 0;
 
-    const stockedItems = rows
+    while (true) {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select(
+          `
+          stock,
+          products (
+            id,
+            name,
+            price,
+            cost,
+            barcode,
+            product_type
+          )
+        `,
+        )
+        .eq("branch_id", activeBranchId)
+        .gt("stock", 0)
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(inventoryFrom, inventoryFrom + batchSize - 1);
+
+      if (error) {
+        console.error("Failed loading catalog inventory batch:", error.message);
+        return;
+      }
+
+      const batch = (data ?? []) as typeof inventoryRows;
+      inventoryRows = inventoryRows.concat(batch);
+      if (batch.length < batchSize) break;
+      inventoryFrom += batchSize;
+    }
+
+    let productRows: ProductCatalogItem[] = [];
+    let productsFrom = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, price, cost, barcode, product_type")
+        // Load every product row so the POS catalog can match the dashboard's
+        // total products count; the previous product_type filter excluded rows.
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(productsFrom, productsFrom + batchSize - 1);
+
+      if (error) {
+        console.error("Failed loading product catalog batch:", error.message);
+        return;
+      }
+
+      const batch = (data ?? []) as ProductCatalogItem[];
+      productRows = productRows.concat(batch);
+      if (batch.length < batchSize) break;
+      productsFrom += batchSize;
+    }
+
+    const stockedItems = inventoryRows
       .map((row) =>
         Array.isArray(row.products) ? row.products[0] : row.products,
       )
-      .filter((p): p is ProductCatalogItem => Boolean(p));
+      .filter((product): product is ProductCatalogItem => Boolean(product));
 
-    const serviceItems = ((serviceData ?? []) as ProductCatalogItem[]) ?? [];
-    const mergedItems = [...stockedItems, ...serviceItems];
+    const mergedItems = [...stockedItems, ...productRows];
     const uniqueItems = Array.from(
       new Map(mergedItems.map((item) => [item.id, item])).values(),
     );
 
     setCatalogItems(uniqueItems);
+    setCatalogPage(1);
+    console.info(
+      `POS catalog loaded: ${uniqueItems.length} unique products ` +
+        `(inventory rows: ${inventoryRows.length}, product rows: ${productRows.length})`,
+    );
   }, [activeBranchId]);
 
   const openNewSaleModal = useCallback(async () => {
@@ -1161,6 +1176,15 @@ export default function POSDashboard() {
       item.barcode?.toLowerCase().includes(q)
     );
   });
+
+  const catalogTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCatalogItems.length / catalogPageSize),
+  );
+  const paginatedCatalogItems = filteredCatalogItems.slice(
+    (catalogPage - 1) * catalogPageSize,
+    catalogPage * catalogPageSize,
+  );
 
   const handleAddCustomerCredit = async () => {
     if (!activeBranchId || !currentUserId) {
@@ -2314,7 +2338,10 @@ export default function POSDashboard() {
                       autoFocus
                       ref={itemSearchRef}
                       value={itemSearch}
-                      onChange={(e) => setItemSearch(e.target.value)}
+                      onChange={(e) => {
+                        setItemSearch(e.target.value);
+                        setCatalogPage(1);
+                      }}
                       placeholder="Search by name…"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -2378,7 +2405,7 @@ export default function POSDashboard() {
                   catalogView === "grid" ? (
                     /* ── Grid view ─────────────────────────────────────── */
                     <div className="grid grid-cols-2 gap-2">
-                      {filteredCatalogItems.map((item) => (
+                      {paginatedCatalogItems.map((item) => (
                         <button
                           key={item.id}
                           onClick={() => addItemToCart(item)}
@@ -2407,7 +2434,7 @@ export default function POSDashboard() {
                   ) : (
                     /* ── List view ─────────────────────────────────────── */
                     <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100 overflow-hidden bg-white">
-                      {filteredCatalogItems.map((item) => (
+                      {paginatedCatalogItems.map((item) => (
                         <button
                           key={item.id}
                           onClick={() => addItemToCart(item)}
@@ -2448,6 +2475,52 @@ export default function POSDashboard() {
                     No products match your search.
                   </div>
                 )}
+              </div>
+
+              {/* Catalog pagination and product count */}
+              <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+                  <p>
+                    Total products:{" "}
+                    <span className="font-bold text-slate-900">
+                      {filteredCatalogItems.length}
+                    </span>
+                    {itemSearch.trim() && (
+                      <span className="text-slate-400"> (filtered)</span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCatalogPage((page) => Math.max(1, page - 1))
+                      }
+                      disabled={catalogPage <= 1}
+                      className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft size={14} /> Previous
+                    </button>
+                    <span className="whitespace-nowrap">
+                      Page{" "}
+                      <span className="font-semibold text-slate-900">
+                        {Math.min(catalogPage, catalogTotalPages)}
+                      </span>{" "}
+                      of {catalogTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCatalogPage((page) =>
+                          Math.min(catalogTotalPages, page + 1),
+                        )
+                      }
+                      disabled={catalogPage >= catalogTotalPages}
+                      className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
